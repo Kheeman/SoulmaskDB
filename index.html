@@ -1,1087 +1,1807 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>Soulmask PO Grouping Viewer</title>
-    <style>
-        :root { --primary: #00d2ff; --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --border: #333; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* 사이드바 */
-        nav { width: 340px; background: #0a0a0a; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-        .file-upload-area { padding: 20px; background: #151515; border-bottom: 1px solid var(--border); }
-        .file-upload-area label { display: block; margin-bottom: 8px; font-size: 0.85rem; color: #aaa; }
-        .file-upload-area input { width: 100%; margin-top: 4px; color: white; font-size: 0.85rem; }
-        .file-upload-area button { width: 100%; padding: 12px; margin-top: 15px; background: var(--primary); color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; font-size: 1rem; }
-        .file-upload-area button:hover { background: #00b8e6; }
-        
-        .cat-container { flex: 1; overflow-y: auto; padding: 10px; }
-        .cat-container h3 { color: var(--primary); font-size: 0.95rem; padding: 0 10px; margin: 15px 0 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        
-        .cat-item { padding: 8px 10px; cursor: pointer; border-radius: 4px; margin-bottom: 2px; font-size: 0.9rem; color: #ccc; display: flex; justify-content: space-between; align-items: center; word-break: break-all; transition: background 0.2s; }
-        .cat-item:hover { background: #222; color: #fff; }
-        .cat-item.active { background: var(--primary); color: #000 !important; font-weight: bold; }
-        .cat-count { font-size: 0.75rem; opacity: 0.7; min-width: 25px; text-align: right; }
-
-        /* 대분류 / 소분류 아코디언 스타일 */
-        .main-cat { color: #f39c12; margin-top: 5px; font-weight: 500; border-left: 3px solid transparent; }
-        .main-cat.active { border-left: 3px solid #000; }
-        .toggle-icon { display: inline-block; width: 18px; font-size: 0.8rem; color: #888; transition: transform 0.2s; text-align: center; }
-        .main-cat:hover .toggle-icon { color: #f39c12; }
-        .main-cat.active .toggle-icon { color: #000; }
-        
-        .sub-cat-group { display: none; margin-bottom: 10px; background: rgba(255,255,255,0.02); border-radius: 0 0 4px 4px; padding: 5px 0; }
-        .sub-cat-group.expanded { display: block; }
-        .sub-cat { padding-left: 35px; font-size: 0.85rem; color: #aaa; }
-        .sub-cat::before { content: "└ "; color: #555; position: absolute; margin-left: -15px; }
-
-        /* 메인 영역 */
-        main { flex: 1; display: flex; flex-direction: column; }
-        header { padding: 15px 20px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
-        .search-bar { flex: 1; padding: 12px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 6px; font-size: 1rem; }
-        .status { font-size: 0.9rem; color: #aaa; min-width: 150px; text-align: right; }
-
-        /* 테이블 */
-        .content { flex: 1; overflow: auto; padding: 0; }
-        table { width: 100%; border-collapse: collapse; background: var(--card); table-layout: fixed; }
-        th, td { padding: 15px; border-bottom: 1px solid #2a2a2a; text-align: left; vertical-align: top; }
-        th { position: sticky; top: 0; background: #252525; color: var(--primary); z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.5); font-size: 0.95rem; }
-        
-        .col-id { width: 20%; }
-        .col-name { width: 25%; }
-        .col-desc { width: 55%; }
-        
-        .dt-name { font-weight: bold; color: #f39c12; font-size: 0.9rem; }
-        .key-id { font-family: Consolas, monospace; color: #bd93f9; font-size: 0.8rem; margin-top: 5px; word-break: break-all; }
-        
-        .str-ko { font-size: 1rem; color: #fff; line-height: 1.4; word-break: keep-all; margin-bottom: 6px; }
-        .str-en { font-size: 0.85rem; color: #888; font-style: italic; line-height: 1.3; }
-        
-        .single-item { background: #222; border-radius: 4px; padding: 10px; border-left: 3px solid #555; }
-
-        .folder-help { margin-top: 10px; font-size: 0.78rem; color: #8f8f8f; line-height: 1.45; }
-        .folder-status { margin-top: 8px; font-size: 0.78rem; color: #9be7ff; word-break: break-all; }
-        .icon-cell { width: 90px; text-align: center; }
-        .icon-box { width: 64px; height: 64px; margin: 0 auto; border: 1px solid #3a3a3a; border-radius: 6px; background: #151515; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .icon-box img, .icon-box canvas { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
-        .icon-empty { color: #666; font-size: 0.72rem; line-height: 1.2; padding: 6px; }
-        .icon-path { margin-top: 8px; font-size: 0.7rem; color: #7f7f7f; word-break: break-all; line-height: 1.3; }
-
-        #loading { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); padding: 25px 50px; border-radius: 8px; color: var(--primary); z-index: 1000; font-size: 1.2rem; font-weight: bold; border: 1px solid var(--primary); }
-    
-        .gift-toolbar { display:flex; gap:10px; align-items:center; padding:12px 20px; background:#181818; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-        .gift-badge { background:#0f2a33; color:#7fe7ff; border:1px solid #1d5566; padding:6px 10px; border-radius:999px; font-size:0.85rem; }
-        .gift-select { padding:10px 12px; background:#2c2c2c; border:1px solid #444; color:#fff; border-radius:6px; min-width:180px; }
-        .gift-summary { display:grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap:12px; padding:16px 20px; background:#151515; border-bottom:1px solid var(--border); }
-        .summary-card { background:#1d1d1d; border:1px solid #2e2e2e; border-radius:10px; padding:14px; }
-        .summary-label { color:#8ea3ad; font-size:0.82rem; margin-bottom:6px; }
-        .summary-value { color:#fff; font-size:1.2rem; font-weight:700; }
-        .chip-row { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
-        .chip { font-size:0.75rem; padding:4px 8px; border-radius:999px; background:#222; color:#bbb; border:1px solid #333; }
-        .chip.active { background:#123947; color:#8fe9ff; border-color:#1e6d85; }
-        .section-title { color:#f39c12; font-weight:700; margin-right:6px; }
-
-    </style>
-</head>
-<body>
-
-<nav>
-    <div class="file-upload-area">
-        <div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:10px;">GitHub Pages 자동 로딩</div>
-        <div style="font-size:0.85rem;color:#bbb;line-height:1.5;">
-            이 페이지는 저장소 안의 파일을 자동으로 불러옵니다.<br>
-            <code>./data/Game.po</code><br>
-            <code>./data/Game_en.po</code><br>
-            <code>./data/tianfuzongbiaoxin2.json</code><br>
-            <code>./assets/Game/UI/resource/...</code>
-        </div>
-        <button type="button" onclick="processFiles()">저장소 파일 다시 불러오기</button>
-        <div id="repoStatus" style="margin-top:10px;font-size:0.8rem;color:#8bd3ff;">대기 중</div>
-        <div id="folderStatus" style="margin-top:6px;font-size:0.8rem;color:#00d2ff;">아이콘 소스: GitHub 저장소</div>
-        <div id="mappingStatus" style="margin-top:4px;font-size:0.8rem;color:#8bd3ff;">매핑 데이터: 저장소 JSON 사용</div>
-    </div>
-    <div class="cat-container" id="categoryList">
-        <h3 style="color:#555; text-align:center; margin-top:50px;">파일을 로딩해주세요</h3>
-    </div>
-</nav>
-
-<main>
-    <header>
-        <input type="text" id="search" class="search-bar" placeholder="이름, 설명, 또는 ID로 검색 (예: 220033, 160681)">
-        <div class="status" id="statusText">대기 중</div>
-    </header>
-    <div class="gift-toolbar" id="giftToolbar">
-        <button id="giftMainBtn" class="gift-select" style="min-width:170px; cursor:pointer; font-weight:700;">캐릭터특성 보기</button>
-        <label class="section-title">등급</label>
-        <select id="giftStarFilter" class="gift-select">
-            <option value="">전체 등급</option>
-        </select>
-        <label class="section-title">효과 유형</label>
-        <select id="giftEffectFilter" class="gift-select">
-            <option value="">전체 효과</option>
-        </select>
-        <label class="section-title">출처</label>
-        <select id="giftSourceFilter" class="gift-select">
-            <option value="">전체 출처</option>
-        </select>
-    </div>
-    <div class="gift-summary" id="giftSummary">
-        <div class="summary-card"><div class="summary-label">현재 분류</div><div class="summary-value" id="summaryCategory">DT_GiftZongBiao</div></div>
-        <div class="summary-card"><div class="summary-label">표시 항목 수</div><div class="summary-value" id="summaryCount">0</div></div>
-        <div class="summary-card"><div class="summary-label">등급 분포</div><div class="summary-value" id="summaryStars">-</div></div>
-        <div class="summary-card"><div class="summary-label">주요 효과</div><div class="summary-value" id="summaryEffects">-</div></div>
-    </div>
-    <div class="content">
-        <table>
-            <thead>
-                <tr>
-                    <th class="icon-cell">아이콘</th>
-                    <th class="col-id">DataTable / ID</th>
-                    <th class="col-name">제목 (Title / Name)</th>
-                    <th class="col-desc">상세 설명 (Description)</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-                <tr><td colspan="4" style="text-align:center; padding: 40px; color: #777;">파일을 로드하면 Name/Title과 Desc가 하나로 묶여서 표시됩니다. 아이콘 경로가 있으면 미리보기도 함께 표시됩니다.</td></tr>
-            </tbody>
-        </table>
-    </div>
-</main>
-
-<div id="loading">파일 구조 분석 및 계층화 진행 중...</div>
-
-<script>
-
-const REPO_CONFIG = {
-    KO_PO_URL: './data/Game.po',
-    EN_PO_URL: './data/Game_en.po',
-    MAPPING_JSON_URL: './data/tianfuzongbiaoxin2.json',
-    RESOURCE_BASE: './assets/Game/UI/resource/'
-};
-
-async function fetchTextFile(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`텍스트 파일 로드 실패: ${url}`);
-    return await res.text();
-}
-
-async function fetchJsonFile(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`JSON 파일 로드 실패: ${url}`);
-    return await res.json();
-}
-
-function updateRepoStatus(message) {
-    const el = document.getElementById('repoStatus');
-    if (el) el.textContent = message;
-}
-
-let globalData = [];
-let currentFilterType = 'ALL'; 
-let currentFilterValue = '';
-let resourceFiles = [];
-let resourceFileMap = new Map();
-let imageUrlCache = new Map();
-
-// 💡 수정된 부분: 파서가 Dictionary 덮어쓰기를 하지 않고 모든 라인을 배열에 순차 저장합니다.
-function parsePO(content) {
-    const records = [];
-    const lines = content.split('\n');
-    let currentLoc = "Unknown";
-    let currentCtxt = null;
-    let currentId = null;
-
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        
-        const locMatch = line.match(/^(?:#:|#\.\s*SourceLocation:)\s*(.+)$/i);
-        if (locMatch) {
-            currentLoc = locMatch[1].trim();
-        } 
-        else if (line.startsWith('msgctxt')) {
-            const match = line.match(/^msgctxt\s+"(.*)"$/);
-            if (match) currentCtxt = match[1];
-        }
-        else if (line.startsWith('msgid')) {
-            const match = line.match(/^msgid\s+"(.*)"$/);
-            if (match) currentId = match[1];
-        } 
-        else if (line.startsWith('msgstr') && currentId !== null) {
-            const match = line.match(/^msgstr\s+"(.*)"$/);
-            if (match) {
-                let strVal = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-                records.push({
-                    loc: currentLoc,
-                    ctxt: currentCtxt,
-                    id: currentId,
-                    str: strVal
-                });
+    <head>
+        <meta charset="UTF-8" />
+        <title>Soulmask PO Grouping Viewer</title>
+        <style>
+            :root {
+                --primary: #00d2ff;
+                --bg: #121212;
+                --card: #1e1e1e;
+                --text: #e0e0e0;
+                --border: #333;
             }
-            // 다음 텍스트 블록을 위해 ID와 컨텍스트 초기화
-            currentId = null;
-            currentCtxt = null;
-        }
-    }
-    return records;
-}
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                margin: 0;
+                display: flex;
+                height: 100vh;
+                overflow: hidden;
+            }
 
+            /* 사이드바 */
+            nav {
+                width: 340px;
+                background: #0a0a0a;
+                display: flex;
+                flex-direction: column;
+                border-right: 1px solid var(--border);
+            }
+            .file-upload-area {
+                padding: 20px;
+                background: #151515;
+                border-bottom: 1px solid var(--border);
+            }
+            .file-upload-area label {
+                display: block;
+                margin-bottom: 8px;
+                font-size: 0.85rem;
+                color: #aaa;
+            }
+            .file-upload-area input {
+                width: 100%;
+                margin-top: 4px;
+                color: white;
+                font-size: 0.85rem;
+            }
+            .file-upload-area button {
+                width: 100%;
+                padding: 12px;
+                margin-top: 15px;
+                background: var(--primary);
+                color: #000;
+                border: none;
+                font-weight: bold;
+                cursor: pointer;
+                border-radius: 4px;
+                font-size: 1rem;
+            }
+            .file-upload-area button:hover {
+                background: #00b8e6;
+            }
 
-function normalizeSlashes(str) {
-    return String(str || '').replace(/\\/g, '/').replace(/\/+/g, '/').trim();
-}
+            .cat-container {
+                flex: 1;
+                overflow-y: auto;
+                padding: 10px;
+            }
+            .cat-container h3 {
+                color: var(--primary);
+                font-size: 0.95rem;
+                padding: 0 10px;
+                margin: 15px 0 10px;
+                border-bottom: 1px solid #333;
+                padding-bottom: 5px;
+            }
 
-function normalizeForLookup(str) {
-    return normalizeSlashes(str).toLowerCase();
-}
+            .cat-item {
+                padding: 8px 10px;
+                cursor: pointer;
+                border-radius: 4px;
+                margin-bottom: 2px;
+                font-size: 0.9rem;
+                color: #ccc;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                word-break: break-all;
+                transition: background 0.2s;
+            }
+            .cat-item:hover {
+                background: #222;
+                color: #fff;
+            }
+            .cat-item.active {
+                background: var(--primary);
+                color: #000 !important;
+                font-weight: bold;
+            }
+            .cat-count {
+                font-size: 0.75rem;
+                opacity: 0.7;
+                min-width: 25px;
+                text-align: right;
+            }
 
-function escapeHtml(str) {
-    return String(str ?? '').replace(/[&<>"']/g, ch => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[ch]));
-}
+            /* 대분류 / 소분류 아코디언 스타일 */
+            .main-cat {
+                color: #f39c12;
+                margin-top: 5px;
+                font-weight: 500;
+                border-left: 3px solid transparent;
+            }
+            .main-cat.active {
+                border-left: 3px solid #000;
+            }
+            .toggle-icon {
+                display: inline-block;
+                width: 18px;
+                font-size: 0.8rem;
+                color: #888;
+                transition: transform 0.2s;
+                text-align: center;
+            }
+            .main-cat:hover .toggle-icon {
+                color: #f39c12;
+            }
+            .main-cat.active .toggle-icon {
+                color: #000;
+            }
 
-function buildResourceFileMap() {
-    resourceFileMap = new Map();
+            .sub-cat-group {
+                display: none;
+                margin-bottom: 10px;
+                background: rgba(255, 255, 255, 0.02);
+                border-radius: 0 0 4px 4px;
+                padding: 5px 0;
+            }
+            .sub-cat-group.expanded {
+                display: block;
+            }
+            .sub-cat {
+                padding-left: 35px;
+                font-size: 0.85rem;
+                color: #aaa;
+            }
+            .sub-cat::before {
+                content: "└ ";
+                color: #555;
+                position: absolute;
+                margin-left: -15px;
+            }
 
-    function addKey(key, file) {
-        if (!key) return;
-        resourceFileMap.set(key, file);
+            /* 메인 영역 */
+            main {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+            }
+            header {
+                padding: 15px 20px;
+                background: var(--card);
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+            .search-bar {
+                flex: 1;
+                padding: 12px;
+                background: #2c2c2c;
+                border: 1px solid #444;
+                color: #fff;
+                border-radius: 6px;
+                font-size: 1rem;
+            }
+            .status {
+                font-size: 0.9rem;
+                color: #aaa;
+                min-width: 150px;
+                text-align: right;
+            }
 
-        const noExt = key.replace(/\.[^.\/]+$/i, '');
-        if (noExt && noExt !== key) resourceFileMap.set(noExt, file);
+            /* 테이블 */
+            .content {
+                flex: 1;
+                overflow: auto;
+                padding: 0;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                background: var(--card);
+                table-layout: fixed;
+            }
+            th,
+            td {
+                padding: 15px;
+                border-bottom: 1px solid #2a2a2a;
+                text-align: left;
+                vertical-align: top;
+            }
+            th {
+                position: sticky;
+                top: 0;
+                background: #252525;
+                color: var(--primary);
+                z-index: 10;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+                font-size: 0.95rem;
+            }
 
-        const parts = key.split('/');
-        const last = parts[parts.length - 1];
-        if (last) {
-            resourceFileMap.set(last, file);
-            const lastNoExt = last.replace(/\.[^.]+$/i, '');
-            if (lastNoExt && lastNoExt !== last) resourceFileMap.set(lastNoExt, file);
-        }
-    }
+            .col-id {
+                width: 20%;
+            }
+            .col-name {
+                width: 25%;
+            }
+            .col-desc {
+                width: 55%;
+            }
 
-    for (const file of resourceFiles) {
-        const rel = normalizeForLookup(file.webkitRelativePath || file.name);
-        const parts = rel.split('/');
-        const resourceIdx = parts.lastIndexOf('resource');
+            .dt-name {
+                font-weight: bold;
+                color: #f39c12;
+                font-size: 0.9rem;
+            }
+            .key-id {
+                font-family: Consolas, monospace;
+                color: #bd93f9;
+                font-size: 0.8rem;
+                margin-top: 5px;
+                word-break: break-all;
+            }
 
-        addKey(rel, file);
-        addKey(file.name.toLowerCase(), file);
+            .str-ko {
+                font-size: 1rem;
+                color: #fff;
+                line-height: 1.4;
+                word-break: keep-all;
+                margin-bottom: 6px;
+            }
+            .str-en {
+                font-size: 0.85rem;
+                color: #888;
+                font-style: italic;
+                line-height: 1.3;
+            }
 
-        if (resourceIdx >= 0) {
-            addKey(parts.slice(resourceIdx).join('/'), file);
-            addKey(parts.slice(resourceIdx + 1).join('/'), file);
-        }
-    }
+            .single-item {
+                background: #222;
+                border-radius: 4px;
+                padding: 10px;
+                border-left: 3px solid #555;
+            }
 
-    const folderStatus = document.getElementById('folderStatus');
-    folderStatus.textContent = resourceFiles.length
-        ? `아이콘 소스: ${resourceFiles.length}개 파일`
-        : '아이콘 소스: GitHub 저장소';
-}
+            .folder-help {
+                margin-top: 10px;
+                font-size: 0.78rem;
+                color: #8f8f8f;
+                line-height: 1.45;
+            }
+            .folder-status {
+                margin-top: 8px;
+                font-size: 0.78rem;
+                color: #9be7ff;
+                word-break: break-all;
+            }
+            .icon-cell {
+                width: 90px;
+                text-align: center;
+            }
+            .icon-box {
+                width: 64px;
+                height: 64px;
+                margin: 0 auto;
+                border: 1px solid #3a3a3a;
+                border-radius: 6px;
+                background: #151515;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
+            .icon-box img,
+            .icon-box canvas {
+                max-width: 100%;
+                max-height: 100%;
+                image-rendering: pixelated;
+            }
+            .icon-empty {
+                color: #666;
+                font-size: 0.72rem;
+                line-height: 1.2;
+                padding: 6px;
+            }
+            .icon-path {
+                margin-top: 8px;
+                font-size: 0.7rem;
+                color: #7f7f7f;
+                word-break: break-all;
+                line-height: 1.3;
+            }
 
-function collectItemTexts(item) {
-    return [
-        item.nameKo, item.nameEn, item.descKo, item.descEn, item.singleKo, item.singleEn,
-        item.shortId, item.msgidBase, item.baseKey, item.mainCat, item.dtName, item.loc
-    ].filter(Boolean).join('\n');
-}
+            #loading {
+                display: none;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.85);
+                padding: 25px 50px;
+                border-radius: 8px;
+                color: var(--primary);
+                z-index: 1000;
+                font-size: 1.2rem;
+                font-weight: bold;
+                border: 1px solid var(--primary);
+            }
 
-function findIconPathInText(text) {
-    if (!text) return '';
-    const matches = text.match(/[A-Za-z]:\\[^"\n\r<>]+?\.(?:tga|png|dds|jpg|jpeg|webp|bmp)/ig)
-        || text.match(/(?:\/|\\)[^"\n\r<>]+?\.(?:tga|png|dds|jpg|jpeg|webp|bmp)/ig)
-        || [];
-    return matches.length ? matches[0] : '';
-}
+            .gift-toolbar {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                padding: 12px 20px;
+                background: #181818;
+                border-bottom: 1px solid var(--border);
+                flex-wrap: wrap;
+            }
+            .gift-badge {
+                background: #0f2a33;
+                color: #7fe7ff;
+                border: 1px solid #1d5566;
+                padding: 6px 10px;
+                border-radius: 999px;
+                font-size: 0.85rem;
+            }
+            .gift-select {
+                padding: 10px 12px;
+                background: #2c2c2c;
+                border: 1px solid #444;
+                color: #fff;
+                border-radius: 6px;
+                min-width: 180px;
+            }
+            .gift-summary {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(120px, 1fr));
+                gap: 12px;
+                padding: 16px 20px;
+                background: #151515;
+                border-bottom: 1px solid var(--border);
+            }
+            .summary-card {
+                background: #1d1d1d;
+                border: 1px solid #2e2e2e;
+                border-radius: 10px;
+                padding: 14px;
+            }
+            .summary-label {
+                color: #8ea3ad;
+                font-size: 0.82rem;
+                margin-bottom: 6px;
+            }
+            .summary-value {
+                color: #fff;
+                font-size: 1.2rem;
+                font-weight: 700;
+            }
+            .chip-row {
+                margin-top: 8px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .chip {
+                font-size: 0.75rem;
+                padding: 4px 8px;
+                border-radius: 999px;
+                background: #222;
+                color: #bbb;
+                border: 1px solid #333;
+            }
+            .chip.active {
+                background: #123947;
+                color: #8fe9ff;
+                border-color: #1e6d85;
+            }
+            .section-title {
+                color: #f39c12;
+                font-weight: 700;
+                margin-right: 6px;
+            }
+        </style>
+    </head>
+    <body>
+        <nav>
+            <div class="file-upload-area">
+                <div
+                    style="
+                        font-size: 1rem;
+                        font-weight: 700;
+                        color: #fff;
+                        margin-bottom: 10px;
+                    "
+                >
+                    GitHub Pages 자동 로딩
+                </div>
+                <div style="font-size: 0.85rem; color: #bbb; line-height: 1.5">
+                    이 페이지는 저장소 안의 파일을 자동으로 불러옵니다.<br />
+                    <code>./data/Game.po</code><br />
+                    <code>./data/Game_en.po</code><br />
+                    <code>./data/tianfuzongbiaoxin2.json</code><br />
+                    <code>./assets/Game/UI/resource/...</code>
+                </div>
+                <button type="button" onclick="processFiles()">
+                    저장소 파일 다시 불러오기
+                </button>
+                <div
+                    id="repoStatus"
+                    style="margin-top: 10px; font-size: 0.8rem; color: #8bd3ff"
+                >
+                    대기 중
+                </div>
+                <div
+                    id="folderStatus"
+                    style="margin-top: 6px; font-size: 0.8rem; color: #00d2ff"
+                >
+                    아이콘 소스: GitHub 저장소
+                </div>
+                <div
+                    id="mappingStatus"
+                    style="margin-top: 4px; font-size: 0.8rem; color: #8bd3ff"
+                >
+                    매핑 데이터: 저장소 JSON 사용
+                </div>
+            </div>
+            <div class="cat-container" id="categoryList">
+                <h3 style="color: #555; text-align: center; margin-top: 50px">
+                    파일을 로딩해주세요
+                </h3>
+            </div>
+        </nav>
 
-function extractIconPath(item) {
-    return findIconPathInText(collectItemTexts(item));
-}
+        <main>
+            <header>
+                <input
+                    type="text"
+                    id="search"
+                    class="search-bar"
+                    placeholder="이름, 설명, 또는 ID로 검색 (예: 220033, 160681)"
+                />
+                <div class="status" id="statusText">대기 중</div>
+            </header>
+            <div class="gift-toolbar" id="giftToolbar">
+                <button
+                    id="giftMainBtn"
+                    class="gift-select"
+                    style="min-width: 170px; cursor: pointer; font-weight: 700"
+                >
+                    캐릭터특성 보기
+                </button>
+                <label class="section-title">등급</label>
+                <select id="giftStarFilter" class="gift-select">
+                    <option value="">전체 등급</option>
+                </select>
+                <label class="section-title">효과 유형</label>
+                <select id="giftEffectFilter" class="gift-select">
+                    <option value="">전체 효과</option>
+                </select>
+                <label class="section-title">출처</label>
+                <select id="giftSourceFilter" class="gift-select">
+                    <option value="">전체 출처</option>
+                </select>
+            </div>
+            <div class="gift-summary" id="giftSummary">
+                <div class="summary-card">
+                    <div class="summary-label">현재 분류</div>
+                    <div class="summary-value" id="summaryCategory">
+                        DT_GiftZongBiao
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">표시 항목 수</div>
+                    <div class="summary-value" id="summaryCount">0</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">등급 분포</div>
+                    <div class="summary-value" id="summaryStars">-</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">주요 효과</div>
+                    <div class="summary-value" id="summaryEffects">-</div>
+                </div>
+            </div>
+            <div class="content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="icon-cell">아이콘</th>
+                            <th class="col-id">DataTable / ID</th>
+                            <th class="col-name">제목 (Title / Name)</th>
+                            <th class="col-desc">상세 설명 (Description)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr>
+                            <td
+                                colspan="4"
+                                style="
+                                    text-align: center;
+                                    padding: 40px;
+                                    color: #777;
+                                "
+                            >
+                                파일을 로드하면 Name/Title과 Desc가 하나로
+                                묶여서 표시됩니다. 아이콘 경로가 있으면
+                                미리보기도 함께 표시됩니다.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
 
-function getLookupCandidates(rawPath) {
-    const normalized = normalizeForLookup(rawPath);
-    if (!normalized) return [];
+        <div id="loading">파일 구조 분석 및 계층화 진행 중...</div>
 
-    const candidates = new Set([normalized]);
-    const idxGame = normalized.indexOf('/game/');
-    const idxResource = normalized.indexOf('/resource/');
-
-    if (idxGame >= 0) candidates.add(normalized.slice(idxGame + 1));
-    if (idxResource >= 0) {
-        candidates.add(normalized.slice(idxResource + 1));
-        candidates.add(normalized.slice(idxResource + '/resource/'.length));
-    }
-
-    const noExt = normalized.replace(/\.[^.\/]+$/i, '');
-    if (noExt && noExt !== normalized) candidates.add(noExt);
-
-    const parts = normalized.split('/');
-    const last = parts.slice(-1)[0];
-    candidates.add(last);
-    candidates.add(last.replace(/\.[^.]+$/i, ''));
-
-    if (parts.length >= 2) candidates.add(parts.slice(-2).join('/'));
-    if (parts.length >= 3) candidates.add(parts.slice(-3).join('/'));
-
-    return Array.from(candidates).filter(Boolean);
-}
-
-function resolveResourceFile(rawPath) {
-    const candidates = getLookupCandidates(rawPath);
-    for (const key of candidates) {
-        if (resourceFileMap.has(key)) return resourceFileMap.get(key);
-    }
-
-    // 확장자가 없는 Unreal 경로용 보조 매칭
-    for (const key of candidates) {
-        for (const [mapKey, file] of resourceFileMap.entries()) {
-            if (mapKey === key) return file;
-            if (mapKey.startsWith(key + '.')) return file;
-            if (mapKey.endsWith('/' + key) || mapKey.endsWith('/' + key + '.tga') || mapKey.endsWith('/' + key + '.png')) return file;
-        }
-    }
-
-    return null;
-}
-
-function readFileAsArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error('파일 읽기 실패'));
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-function tgaToDataUrl(buffer) {
-    const bytes = new Uint8Array(buffer);
-    if (bytes.length < 18) throw new Error('잘못된 TGA 파일');
-
-    const idLength = bytes[0];
-    const imageType = bytes[2];
-    const width = bytes[12] | (bytes[13] << 8);
-    const height = bytes[14] | (bytes[15] << 8);
-    const pixelDepth = bytes[16];
-    const descriptor = bytes[17];
-
-    if (!width || !height) throw new Error('TGA 크기 정보 없음');
-    if (![2, 10].includes(imageType)) throw new Error(`지원하지 않는 TGA 타입: ${imageType}`);
-    if (![24, 32].includes(pixelDepth)) throw new Error(`지원하지 않는 픽셀 포맷: ${pixelDepth}`);
-
-    const bytesPerPixel = pixelDepth >> 3;
-    let offset = 18 + idLength;
-    const pixelCount = width * height;
-    const out = new Uint8ClampedArray(pixelCount * 4);
-
-    function writePixel(pixelIndex, b, g, r, a = 255) {
-        const topOrigin = (descriptor & 0x20) !== 0;
-        const x = pixelIndex % width;
-        const y = Math.floor(pixelIndex / width);
-        const targetY = topOrigin ? y : (height - 1 - y);
-        const outIndex = (targetY * width + x) * 4;
-        out[outIndex] = r;
-        out[outIndex + 1] = g;
-        out[outIndex + 2] = b;
-        out[outIndex + 3] = a;
-    }
-
-    if (imageType === 2) {
-        for (let i = 0; i < pixelCount; i++) {
-            const b = bytes[offset++];
-            const g = bytes[offset++];
-            const r = bytes[offset++];
-            const a = bytesPerPixel === 4 ? bytes[offset++] : 255;
-            writePixel(i, b, g, r, a);
-        }
-    } else if (imageType === 10) {
-        let i = 0;
-        while (i < pixelCount) {
-            const header = bytes[offset++];
-            const isRle = (header & 0x80) !== 0;
-            const count = (header & 0x7f) + 1;
-
-            if (isRle) {
-                const b = bytes[offset++];
-                const g = bytes[offset++];
-                const r = bytes[offset++];
-                const a = bytesPerPixel === 4 ? bytes[offset++] : 255;
-                for (let j = 0; j < count && i < pixelCount; j++, i++) {
-                    writePixel(i, b, g, r, a);
+        <script>
+            async function fetchBytes(url) {
+                const res = await fetch(url, { cache: "no-cache" });
+                if (!res.ok) {
+                    throw new Error(`파일 로드 실패: ${url} (${res.status})`);
                 }
-            } else {
-                for (let j = 0; j < count && i < pixelCount; j++, i++) {
-                    const b = bytes[offset++];
-                    const g = bytes[offset++];
-                    const r = bytes[offset++];
-                    const a = bytesPerPixel === 4 ? bytes[offset++] : 255;
-                    writePixel(i, b, g, r, a);
+                return new Uint8Array(await res.arrayBuffer());
+            }
+
+            function decodeBytesAuto(bytes) {
+                if (!bytes || !bytes.length) return "";
+
+                if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xff &&
+                    bytes[1] === 0xfe
+                ) {
+                    return new TextDecoder("utf-16le").decode(bytes);
                 }
-            }
-        }
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.putImageData(new ImageData(out, width, height), 0, 0);
-    return canvas.toDataURL('image/png');
-}
-
-async function getImageUrlForPath(rawPath) {
-    if (!rawPath) return null;
-    if (imageUrlCache.has(rawPath)) return imageUrlCache.get(rawPath);
-
-    const normalized = normalizeGameAssetPath(rawPath);
-    const marker = 'Game/UI/resource/';
-    const idx = normalized.indexOf(marker);
-    if (idx < 0) {
-        imageUrlCache.set(rawPath, null);
-        return null;
-    }
-
-    const rel = normalized.slice(idx + marker.length);
-    const extCandidates = /\.[a-z0-9]+$/i.test(rel)
-        ? [rel]
-        : [rel + '.png', rel + '.webp', rel + '.jpg', rel + '.jpeg', rel + '.bmp', rel + '.tga', rel + '.TGA'];
-
-    for (const relPath of extCandidates) {
-        const url = REPO_CONFIG.RESOURCE_BASE + relPath;
-        try {
-            if (/\.tga$/i.test(relPath)) {
-                const res = await fetch(url, { cache: 'no-store' });
-                if (!res.ok) continue;
-                const buffer = await res.arrayBuffer();
-                const dataUrl = tgaToDataUrl(buffer);
-                imageUrlCache.set(rawPath, dataUrl);
-                return dataUrl;
-            } else {
-                const ok = await new Promise(resolve => {
-                    const img = new Image();
-                    img.onload = () => resolve(true);
-                    img.onerror = () => resolve(false);
-                    img.src = url;
-                });
-                if (ok) {
-                    imageUrlCache.set(rawPath, url);
-                    return url;
+                if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xfe &&
+                    bytes[1] === 0xff
+                ) {
+                    return new TextDecoder("utf-16be").decode(bytes);
                 }
-            }
-        } catch (err) {
-            console.warn('아이콘 로드 실패:', url, err);
-        }
-    }
+                if (
+                    bytes.length >= 3 &&
+                    bytes[0] === 0xef &&
+                    bytes[1] === 0xbb &&
+                    bytes[2] === 0xbf
+                ) {
+                    return new TextDecoder("utf-8").decode(bytes);
+                }
 
-    imageUrlCache.set(rawPath, null);
-    return null;
-}
-
-async function renderIconCell(item) {
-    const candidates = getIconCandidates(item);
-    const rawPath = candidates.find(Boolean) || extractIconPath(item);
-
-    if (!rawPath) {
-        return `<td class="icon-cell"><div class="icon-box"><div class="icon-empty">아이콘<br>없음</div></div><div class="icon-path">매핑 또는 원본 경로 없음</div></td>`;
-    }
-
-    let url = null;
-    let matchedPath = rawPath;
-
-    for (const candidate of candidates.length ? candidates : [rawPath]) {
-        url = await getImageUrlForPath(candidate);
-        if (url) {
-            matchedPath = candidate;
-            break;
-        }
-    }
-
-    const pathHtml = `<div class="icon-path">${escapeHtml(matchedPath)}</div>`;
-
-    if (!url) {
-        return `<td class="icon-cell"><div class="icon-box"><div class="icon-empty">파일<br>미매칭</div></div>${pathHtml}</td>`;
-    }
-
-    return `<td class="icon-cell"><div class="icon-box"><img src="${url}" alt="icon"></div>${pathHtml}</td>`;
-}
-
-// JSON 매핑 파일 기반 아이콘 경로 맵
-let externalIconMap = {};
-
-function normalizeGameAssetPath(picValue) {
-    if (!picValue) return '';
-    let s = String(picValue).trim();
-
-    const unrealMatch = s.match(/'([^']+)'/);
-    if (unrealMatch) s = unrealMatch[1];
-
-    s = s.replace(/^\/+/, '');
-
-    const dotIdx = s.lastIndexOf('.');
-    const slashIdx = s.lastIndexOf('/');
-    if (dotIdx > slashIdx) s = s.slice(0, dotIdx);
-
-    return s;
-}
-
-function getMappedIconPath(item) {
-    const keyCandidates = [
-        String(item.shortId || '').trim(),
-        String(item.msgidBase || '').trim(),
-        String(item.nameKo || '').trim(),
-        String(item.nameEn || '').trim()
-    ].filter(Boolean);
-
-    for (const key of keyCandidates) {
-        if (externalIconMap[key]) return normalizeGameAssetPath(externalIconMap[key]);
-    }
-    return '';
-}
-
-
-
-
-const giftSourceLabelMap = {
-    'BornBuLuoCiTiao': '부족 특성',
-    'BornChuShen': '출신 특성',
-    'ChengHao': '칭호',
-    'JingLi': '경험',
-    'Normal': '일반',
-    'XiHao': '취향',
-    'XingGe': '성격'
-};
-
-function getGiftSourceLabel(value) {
-    return giftSourceLabelMap[value] || value || '';
-}
-
-let giftMappingData = [];
-let giftMapById = {};
-let giftUIEnabled = true;
-
-function parseNsLocTextValue(s) {
-    if (!s) return '';
-    const m = String(s).match(/NSLOCTEXT\([^,]+,[^,]+,\s*"([\s\S]*?)"\s*\)$/);
-    return m ? m[1] : String(s);
-}
-
-async function parseJsonFileGeneric(file) {
-    if (!file) return null;
-    const raw = await file.arrayBuffer();
-    const bytes = new Uint8Array(raw);
-    let text = '';
-    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-        text = new TextDecoder('utf-16le').decode(bytes);
-    } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
-        text = new TextDecoder('utf-16be').decode(bytes);
-    } else if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-        text = new TextDecoder('utf-8').decode(bytes);
-    } else {
-        try {
-            text = new TextDecoder('utf-8').decode(bytes);
-            JSON.parse(text);
-        } catch (e) {
-            text = new TextDecoder('utf-16le').decode(bytes);
-        }
-    }
-    return JSON.parse(text);
-}
-
-async function loadGiftJsonDetails(file) {
-    giftMappingData = [];
-    giftMapById = {};
-    if (!file) {
-        refreshGiftFilterOptions();
-        return;
-    }
-    const arr = await parseJsonFileGeneric(file);
-    if (Array.isArray(arr)) {
-        giftMappingData = arr.map(obj => ({
-            id: String(obj?.ID ?? obj?.Name ?? '').trim(),
-            name: String(obj?.Name ?? '').trim(),
-            star: obj?.Star ?? '',
-            effect: String(obj?.NGEffect ?? '').trim(),
-            source: String(obj?.NGEffectSource ?? '').trim(),
-            attrType: String(obj?.NGEffectAttrType ?? '').trim(),
-            pic: String(obj?.Pic ?? '').trim(),
-            title: parseNsLocTextValue(obj?.Title ?? ''),
-            desc: parseNsLocTextValue(obj?.Desc ?? ''),
-            fuzzy: String(obj?.MoHuDesc ?? '').trim(),
-            raw: obj
-        }));
-        for (const row of giftMappingData) {
-            if (row.id) giftMapById[row.id] = row;
-            if (row.name && !giftMapById[row.name]) giftMapById[row.name] = row;
-        }
-    }
-    refreshGiftFilterOptions();
-}
-
-function refreshGiftFilterOptions() {
-    const stars = [...new Set(giftMappingData.map(x => String(x.star)).filter(Boolean))].sort((a,b)=>Number(a)-Number(b));
-    const effects = [...new Set(giftMappingData.map(x => x.effect).filter(Boolean))].sort();
-    const sources = [...new Set(giftMappingData.map(x => x.source).filter(Boolean))].sort();
-    const starSel = document.getElementById('giftStarFilter');
-    const effectSel = document.getElementById('giftEffectFilter');
-    const sourceSel = document.getElementById('giftSourceFilter');
-    if (!starSel) return;
-
-    const prevStar = starSel.value, prevEffect = effectSel.value, prevSource = sourceSel.value;
-    starSel.innerHTML = '<option value="">전체 등급</option>' + stars.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}성</option>`).join('');
-    effectSel.innerHTML = '<option value="">전체 효과</option>' + effects.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-    sourceSel.innerHTML = '<option value="">전체 출처</option>' + sources.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(getGiftSourceLabel(v))}</option>`).join('');
-    starSel.value = prevStar;
-    effectSel.value = prevEffect;
-    sourceSel.value = prevSource;
-}
-
-function enrichGiftItem(item) {
-    const meta = giftMapById[String(item.shortId || '')] || giftMapById[String(item.msgidBase || '')] || null;
-    if (!meta) return item;
-    return {
-        ...item,
-        giftMeta: meta,
-        pic: meta.pic || item.pic,
-        iconPath: meta.pic || item.iconPath,
-        nameKo: item.nameKo || meta.title || item.nameKo,
-        descKo: item.descKo || meta.desc || item.descKo
-    };
-}
-
-function getGiftFilteredData(base) {
-    const starVal = document.getElementById('giftStarFilter')?.value || '';
-    const effectVal = document.getElementById('giftEffectFilter')?.value || '';
-    const sourceVal = document.getElementById('giftSourceFilter')?.value || '';
-    return base.filter(item => {
-        const meta = item.giftMeta || giftMapById[String(item.shortId || '')];
-        if (starVal && String(meta?.star ?? '') !== starVal) return false;
-        if (effectVal && String(meta?.effect ?? '') !== effectVal) return false;
-        if (sourceVal && String(meta?.source ?? '') !== sourceVal) return false;
-        return true;
-    });
-}
-
-function updateGiftSummary(items) {
-    const countEl = document.getElementById('summaryCount');
-    const catEl = document.getElementById('summaryCategory');
-    const starEl = document.getElementById('summaryStars');
-    const effEl = document.getElementById('summaryEffects');
-    if (!countEl) return;
-    countEl.textContent = String(items.length);
-    catEl.textContent = currentFilterType === 'SUB' ? currentFilterValue : (currentFilterType === 'ALL' ? '전체 보기' : 'DT_GiftZongBiao');
-    const starMap = {};
-    const effMap = {};
-    for (const item of items) {
-        const meta = item.giftMeta || {};
-        if (meta.star) starMap[meta.star] = (starMap[meta.star] || 0) + 1;
-        if (meta.effect) effMap[meta.effect] = (effMap[meta.effect] || 0) + 1;
-    }
-    starEl.textContent = Object.keys(starMap).length ? Object.entries(starMap).sort((a,b)=>Number(a[0])-Number(b[0])).map(([k,v]) => `${k}성 ${v}`).join(' / ') : '-';
-    effEl.textContent = Object.keys(effMap).length ? Object.entries(effMap).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v]) => `${k} ${v}`).join(' / ') : '-';
-}
-
-
-function bindGiftMainButton() {
-    const btn = document.getElementById('giftMainBtn');
-    if (!btn || btn.dataset.bound) return;
-    btn.dataset.bound = '1';
-    btn.addEventListener('click', () => {
-        const target = Array.from(document.querySelectorAll('#categoryList .sub-cat'))
-            .find(el => (el.textContent || '').includes('DT_GiftZongBiao'));
-        if (target) {
-            // 상위 아코디언 펼치기
-            const group = target.parentElement;
-            if (group && !group.classList.contains('expanded')) {
-                group.classList.add('expanded');
-                const mainDiv = group.previousElementSibling;
-                const icon = mainDiv?.querySelector('.toggle-icon');
-                if (icon) icon.innerText = '▼';
-            }
-            target.click();
-        }
-    });
-}
-
-function ensureGiftDefaultView() {
-    const target = Array.from(document.querySelectorAll('#categoryList .sub-cat')).find(el => (el.textContent || '').includes('DT_GiftZongBiao'));
-    if (target) target.click();
-}
-
-function setupGiftToolbarEvents() {
-    ['giftStarFilter','giftEffectFilter','giftSourceFilter'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && !el.dataset.bound) {
-            el.dataset.bound = '1';
-            el.addEventListener('change', () => renderTable());
-        }
-    });
-}
-
-async function loadMappingFile(file) {
-    if (!file) {
-        externalIconMap = externalIconMap || {};
-        const status = document.getElementById('mappingStatus');
-        if (status) status.textContent = `매핑 데이터: 내장 ${Object.keys(externalIconMap).length}개`;
-        return;
-    }
-
-    const raw = await file.arrayBuffer();
-    const bytes = new Uint8Array(raw);
-    let text = '';
-
-    // UTF-16 BOM / UTF-8 BOM 대응
-    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
-        text = new TextDecoder('utf-16le').decode(bytes);
-    } else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
-        text = new TextDecoder('utf-16be').decode(bytes);
-    } else if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-        text = new TextDecoder('utf-8').decode(bytes);
-    } else {
-        try {
-            text = new TextDecoder('utf-8').decode(bytes);
-            JSON.parse(text);
-        } catch (e) {
-            text = new TextDecoder('utf-16le').decode(bytes);
-        }
-    }
-
-    const arr = JSON.parse(text);
-    const nextMap = {};
-
-    if (Array.isArray(arr)) {
-        for (const obj of arr) {
-            const name = String(obj?.Name ?? '').trim();
-            const id = String(obj?.ID ?? '').trim();
-            const pic = String(obj?.Pic ?? '').trim();
-            if (!pic) continue;
-            if (name) nextMap[name] = pic;
-            if (id && id !== '0') nextMap[id] = pic;
-        }
-    } else if (arr && typeof arr === 'object') {
-        for (const [k, v] of Object.entries(arr)) {
-            if (typeof v === 'string') nextMap[String(k)] = v;
-            else if (v && typeof v === 'object' && v.Pic) nextMap[String(k)] = String(v.Pic);
-        }
-    }
-
-    externalIconMap = nextMap;
-
-    const status = document.getElementById('mappingStatus');
-    if (status) status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
-}
-
-
-function applyMappingObject(arr) {
-    const nextMap = {};
-    if (Array.isArray(arr)) {
-        for (const obj of arr) {
-            const name = String(obj?.Name ?? '').trim();
-            const id = String(obj?.ID ?? '').trim();
-            const pic = String(obj?.Pic ?? '').trim();
-            if (!pic) continue;
-            if (name) nextMap[name] = pic;
-            if (id && id !== '0') nextMap[id] = pic;
-        }
-    } else if (arr && typeof arr === 'object') {
-        for (const [k, v] of Object.entries(arr)) {
-            if (typeof v === 'string') nextMap[String(k)] = v;
-            else if (v && typeof v === 'object' && v.Pic) nextMap[String(k)] = String(v.Pic);
-        }
-    }
-    externalIconMap = nextMap;
-    const status = document.getElementById('mappingStatus');
-    if (status) status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
-}
-
-function applyGiftJsonDetails(arr) {
-    giftMappingData = [];
-    giftMapById = {};
-    if (Array.isArray(arr)) {
-        giftMappingData = arr.map(obj => ({
-            id: String(obj?.ID ?? obj?.Name ?? '').trim(),
-            name: String(obj?.Name ?? '').trim(),
-            star: obj?.Star ?? '',
-            effect: String(obj?.NGEffect ?? '').trim(),
-            source: String(obj?.NGEffectSource ?? '').trim(),
-            attrType: String(obj?.NGEffectAttrType ?? '').trim(),
-            pic: String(obj?.Pic ?? '').trim(),
-            title: parseNsLocTextValue(obj?.Title ?? ''),
-            desc: parseNsLocTextValue(obj?.Desc ?? ''),
-            fuzzy: String(obj?.MoHuDesc ?? '').trim(),
-            raw: obj
-        }));
-        for (const row of giftMappingData) {
-            if (row.id) giftMapById[row.id] = row;
-            if (row.name && !giftMapById[row.name]) giftMapById[row.name] = row;
-        }
-    }
-    refreshGiftFilterOptions();
-}
-
-async function processFiles() {
-    document.getElementById('loading').style.display = 'block';
-    updateRepoStatus('저장소 파일 불러오는 중...');
-
-    setTimeout(async () => {
-        try {
-            imageUrlCache.clear();
-
-            const [koText, enText, mappingJson] = await Promise.all([
-                fetchTextFile(REPO_CONFIG.KO_PO_URL),
-                fetchTextFile(REPO_CONFIG.EN_PO_URL).catch(() => ""),
-                fetchJsonFile(REPO_CONFIG.MAPPING_JSON_URL)
-            ]);
-
-            applyMappingObject(mappingJson);
-            applyGiftJsonDetails(mappingJson);
-
-            const koRecords = parsePO(koText);
-            const enRecordsArray = enText ? parsePO(enText) : [];
-
-            const enRecordsMap = {};
-            for (const en of enRecordsArray) {
-                const key = en.ctxt || en.id;
-                enRecordsMap[key] = en.str;
-            }
-
-            const groups = {};
-
-            for (const koData of koRecords) {
-                const loc = koData.loc;
-                const strKo = koData.str;
-                const msgid = koData.id;
-                const ctxt = koData.ctxt;
-
-                const lookupKey = ctxt || msgid;
-                const strEn = enRecordsMap[lookupKey] || "";
-
-                let mainCategory = "기타 (Etc)";
-                let dataTable = "Unknown";
-
-                const dtMatch = loc.match(/DataTable\/([^\/]+)\/([^\.]+)/);
-                if (dtMatch) {
-                    mainCategory = dtMatch[1];
-                    dataTable = dtMatch[2];
-                } else {
-                    const fallbackMatch = loc.match(/\/Game\/([^\/]+)\/.*\/([^\.]+)/);
-                    if (fallbackMatch) {
-                        mainCategory = fallbackMatch[1] + " (Etc)";
-                        dataTable = fallbackMatch[2];
+                let zeroEven = 0;
+                let zeroOdd = 0;
+                const sample = Math.min(bytes.length, 4000);
+                for (let i = 0; i < sample; i++) {
+                    if (bytes[i] === 0) {
+                        if (i % 2 === 0) zeroEven += 1;
+                        else zeroOdd += 1;
                     }
                 }
 
-                let type = 'single';
-                let baseKey = lookupKey;
-                let shortId = msgid;
+                const utf16leLikely = zeroOdd > sample * 0.2;
+                const utf16beLikely = zeroEven > sample * 0.2;
 
-                const locEndMatch = loc.match(/\.(Name|Title|Desc)$/i);
-                const idEndMatch = msgid.match(/_(Name|Title|Desc)$/i);
+                const tries = [];
+                if (utf16leLikely) tries.push("utf-16le");
+                if (utf16beLikely) tries.push("utf-16be");
+                tries.push("utf-8", "utf-16le", "utf-16be");
 
-                if (locEndMatch) {
-                    type = locEndMatch[1].toLowerCase();
-                    baseKey = loc.replace(/\.(Name|Title|Desc)$/i, '');
-                    shortId = baseKey.split('.').pop();
-                } else if (idEndMatch) {
-                    type = idEndMatch[1].toLowerCase();
-                    baseKey = msgid.replace(/_(Name|Title|Desc)$/i, '');
-                    shortId = baseKey.split('_').pop();
+                let lastText = "";
+                for (const enc of [...new Set(tries)]) {
+                    try {
+                        const text = new TextDecoder(enc, {
+                            fatal: false,
+                        }).decode(bytes);
+                        lastText = text;
+                        if (!text.includes("\u0000")) return text;
+                    } catch (e) {}
                 }
+                return lastText;
+            }
 
-                if (!groups[baseKey]) {
-                    groups[baseKey] = {
-                        baseKey: baseKey,
-                        shortId: shortId,
-                        msgidBase: msgid,
-                        mainCat: mainCategory,
-                        dtName: dataTable,
-                        nameKo: "", nameEn: "",
-                        descKo: "", descEn: "",
-                        singleKo: "", singleEn: "",
-                        isGrouped: false
-                    };
-                }
+            async function fetchTextWithEncoding(url) {
+                const bytes = await fetchBytes(url);
+                let text = decodeBytesAuto(bytes);
+                text = text.replace(/^\uFEFF/, "").replace(/\u0000/g, "");
+                return text;
+            }
 
-                if (type === 'name' || type === 'title') {
-                    groups[baseKey].nameKo = strKo;
-                    groups[baseKey].nameEn = strEn;
-                    groups[baseKey].isGrouped = true;
-                } else if (type === 'desc') {
-                    groups[baseKey].descKo = strKo;
-                    groups[baseKey].descEn = strEn;
-                    groups[baseKey].isGrouped = true;
-                } else {
-                    groups[baseKey].singleKo = strKo;
-                    groups[baseKey].singleEn = strEn;
+            async function fetchJsonWithEncoding(url) {
+                const bytes = await fetchBytes(url);
+                let text = decodeBytesAuto(bytes);
+                text = text
+                    .replace(/^\uFEFF/, "")
+                    .replace(/[\u200B-\u200D\u2060]/g, "")
+                    .replace(/\u0000/g, "")
+                    .trim();
+
+                try {
+                    return JSON.parse(text);
+                } catch (e1) {
+                    const cleaned = text.replace(/^﻿/, "").trim();
+                    try {
+                        return JSON.parse(cleaned);
+                    } catch (e2) {
+                        throw new Error(
+                            `JSON 파싱 실패: ${url}\n${e2.message}`,
+                        );
+                    }
                 }
             }
 
-            globalData = Object.values(groups);
-            renderCategories();
-            setupGiftToolbarEvents();
-            bindGiftMainButton();
-            selectFilter('ALL', '', document.getElementById('allCatBtn'));
-            updateRepoStatus(`로드 완료: PO ${koRecords.length}개, 영문 ${enRecordsArray.length}개, 매핑 ${Object.keys(externalIconMap).length}개`);
-        } catch (e) {
-            console.error(e);
-            updateRepoStatus('로드 실패');
-            alert("저장소 파일 로딩 오류: " + e.message);
-        } finally {
-            document.getElementById('loading').style.display = 'none';
-        }
-    }, 30);
-}
-
-function renderCategories() {
-    const container = document.getElementById('categoryList');
-    container.innerHTML = '<h3>분류 (대분류 / 소분류)</h3>';
-    
-    const tree = {};
-    globalData.forEach(item => {
-        if (!tree[item.mainCat]) tree[item.mainCat] = new Set();
-        tree[item.mainCat].add(item.dtName);
-    });
-
-    const allDiv = document.createElement('div');
-    allDiv.className = 'cat-item main-cat';
-    allDiv.id = 'allCatBtn';
-    allDiv.innerHTML = `<span>전체 보기</span> <span class="cat-count">${globalData.length}</span>`;
-    allDiv.onclick = () => selectFilter('ALL', '', allDiv);
-    container.appendChild(allDiv);
-
-    const sortedMains = Object.keys(tree).sort((a, b) => {
-        const ap = a === 'NaturalGift' ? -100 : (a.includes('기타') ? 50 : 0);
-        const bp = b === 'NaturalGift' ? -100 : (b.includes('기타') ? 50 : 0);
-        if (ap !== bp) return ap - bp;
-        return a.localeCompare(b);
-    });
-
-    sortedMains.forEach((mainCat, index) => {
-        const mainCount = globalData.filter(d => d.mainCat === mainCat).length;
-        
-        const mainDiv = document.createElement('div');
-        mainDiv.className = 'cat-item main-cat';
-        mainDiv.innerHTML = `<span><span class="toggle-icon">▶</span> 📁 ${mainCat}</span> <span class="cat-count">${mainCount}</span>`;
-        
-        const subGroup = document.createElement('div');
-        subGroup.className = 'sub-cat-group';
-        
-        mainDiv.onclick = () => {
-            const isExpanded = subGroup.classList.contains('expanded');
-            
-            if (isExpanded) {
-                subGroup.classList.remove('expanded');
-                mainDiv.querySelector('.toggle-icon').innerText = '▶';
-            } else {
-                subGroup.classList.add('expanded');
-                mainDiv.querySelector('.toggle-icon').innerText = '▼';
-            }
-            
-            selectFilter('MAIN', mainCat, mainDiv);
-        };
-
-        container.appendChild(mainDiv);
-
-        const sortedSubs = Array.from(tree[mainCat]).sort((a,b) => {
-            if (a === 'DT_GiftZongBiao') return -1;
-            if (b === 'DT_GiftZongBiao') return 1;
-            return a.localeCompare(b);
-        });
-        sortedSubs.forEach(subCat => {
-            const subCount = globalData.filter(d => d.mainCat === mainCat && d.dtName === subCat).length;
-            const subDiv = document.createElement('div');
-            subDiv.className = 'cat-item sub-cat';
-            subDiv.innerHTML = `<span>${subCat}</span> <span class="cat-count">${subCount}</span>`;
-            
-            subDiv.onclick = (e) => {
-                e.stopPropagation(); 
-                selectFilter('SUB', subCat, subDiv);
+            const REPO_CONFIG = {
+                KO_PO_URL: "./data/Game.po",
+                EN_PO_URL: "./data/Game_en.po",
+                MAPPING_JSON_URL: "./data/tianfuzongbiaoxin2.json",
+                RESOURCE_BASE: "./assets/Game/UI/resource/",
             };
-            subGroup.appendChild(subDiv);
-        });
 
-        container.appendChild(subGroup);
-    });
-}
+            async function fetchTextFile(url) {
+                const res = await fetch(url, { cache: "no-store" });
+                if (!res.ok) throw new Error(`텍스트 파일 로드 실패: ${url}`);
+                return await res.text();
+            }
 
-function selectFilter(filterType, filterValue, element) {
-    currentFilterType = filterType;
-    currentFilterValue = filterValue;
-    
-    document.querySelectorAll('#categoryList .cat-item').forEach(el => el.classList.remove('active'));
-    if(element) element.classList.add('active');
+            async function fetchJsonFile(url) {
+                const res = await fetch(url, { cache: "no-store" });
+                if (!res.ok) throw new Error(`JSON 파일 로드 실패: ${url}`);
+                return await res.json();
+            }
 
-    renderTable();
-}
+            function updateRepoStatus(message) {
+                const el = document.getElementById("repoStatus");
+                if (el) el.textContent = message;
+            }
 
-function getIconCandidates(item) {
-    const candidates = [];
-    const mapped = getMappedIconPath(item);
-    if (mapped) {
-        candidates.push(mapped);
-    }
+            let globalData = [];
+            let currentFilterType = "ALL";
+            let currentFilterValue = "";
+            let resourceFiles = [];
+            let resourceFileMap = new Map();
+            let imageUrlCache = new Map();
 
-    const rawCandidates = [
-        item.iconPath,
-        item.pic,
-        item.icon,
-        item.image,
-        item.texture,
-        item.IconPath,
-        item.Pic
-    ].filter(Boolean);
+            // 💡 수정된 부분: 파서가 Dictionary 덮어쓰기를 하지 않고 모든 라인을 배열에 순차 저장합니다.
+            function parsePO(content) {
+                const records = [];
+                const lines = content.split("\n");
+                let currentLoc = "Unknown";
+                let currentCtxt = null;
+                let currentId = null;
 
-    for (const raw of rawCandidates) {
-        let s = String(raw).trim();
-        if (/^Texture2D'/i.test(s) || s.includes("/Game/")) {
-            s = normalizeGameAssetPath(s);
-        }
-        if (s) candidates.push(s);
-    }
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
 
-    return [...new Set(candidates)];
-}
+                    const locMatch = line.match(
+                        /^(?:#:|#\.\s*SourceLocation:)\s*(.+)$/i,
+                    );
+                    if (locMatch) {
+                        currentLoc = locMatch[1].trim();
+                    } else if (line.startsWith("msgctxt")) {
+                        const match = line.match(/^msgctxt\s+"(.*)"$/);
+                        if (match) currentCtxt = match[1];
+                    } else if (line.startsWith("msgid")) {
+                        const match = line.match(/^msgid\s+"(.*)"$/);
+                        if (match) currentId = match[1];
+                    } else if (
+                        line.startsWith("msgstr") &&
+                        currentId !== null
+                    ) {
+                        const match = line.match(/^msgstr\s+"(.*)"$/);
+                        if (match) {
+                            let strVal = match[1]
+                                .replace(/\\"/g, '"')
+                                .replace(/\\n/g, "\n");
+                            records.push({
+                                loc: currentLoc,
+                                ctxt: currentCtxt,
+                                id: currentId,
+                                str: strVal,
+                            });
+                        }
+                        // 다음 텍스트 블록을 위해 ID와 컨텍스트 초기화
+                        currentId = null;
+                        currentCtxt = null;
+                    }
+                }
+                return records;
+            }
 
-async function renderTable() {
-    const term = document.getElementById('search').value.toLowerCase();
-    const tbody = document.getElementById('tableBody');
-    const status = document.getElementById('statusText');
-    
-    let filtered = globalData.filter(item => {
-        if (currentFilterType === 'MAIN' && item.mainCat !== currentFilterValue) return false;
-        if (currentFilterType === 'SUB' && item.dtName !== currentFilterValue) return false;
+            function normalizeSlashes(str) {
+                return String(str || "")
+                    .replace(/\\/g, "/")
+                    .replace(/\/+/g, "/")
+                    .trim();
+            }
 
-        if (!term) return true;
-        return (item.nameKo.toLowerCase().includes(term) || item.descKo.toLowerCase().includes(term) ||
-                item.singleKo.toLowerCase().includes(term) || item.shortId.toLowerCase().includes(term) ||
-                item.msgidBase.toLowerCase().includes(term));
-    }).map(enrichGiftItem);
+            function normalizeForLookup(str) {
+                return normalizeSlashes(str).toLowerCase();
+            }
 
-    const isGiftView = (currentFilterType === 'SUB' && currentFilterValue === 'DT_GiftZongBiao') || 
-                       (currentFilterType === 'MAIN' && currentFilterValue === 'NaturalGift') ||
-                       (currentFilterType === 'ALL' && giftUIEnabled);
+            function escapeHtml(str) {
+                return String(str ?? "").replace(
+                    /[&<>"']/g,
+                    (ch) =>
+                        ({
+                            "&": "&amp;",
+                            "<": "&lt;",
+                            ">": "&gt;",
+                            '"': "&quot;",
+                            "'": "&#39;",
+                        })[ch],
+                );
+            }
 
-    if (isGiftView) {
-        filtered = filtered.filter(item => item.dtName === 'DT_GiftZongBiao');
-        filtered = getGiftFilteredData(filtered);
-    }
+            function buildResourceFileMap() {
+                resourceFileMap = new Map();
 
-    status.innerText = `총 ${filtered.length} 세트`;
-    updateGiftSummary(filtered);
+                function addKey(key, file) {
+                    if (!key) return;
+                    resourceFileMap.set(key, file);
 
-    let html = '';
-    const limit = Math.min(filtered.length, 1000);
-    
-    for (let i = 0; i < limit; i++) {
-        const item = filtered[i];
-        const iconCellHtml = await renderIconCell(item);
-        
-        html += `<tr>${iconCellHtml}
+                    const noExt = key.replace(/\.[^.\/]+$/i, "");
+                    if (noExt && noExt !== key)
+                        resourceFileMap.set(noExt, file);
+
+                    const parts = key.split("/");
+                    const last = parts[parts.length - 1];
+                    if (last) {
+                        resourceFileMap.set(last, file);
+                        const lastNoExt = last.replace(/\.[^.]+$/i, "");
+                        if (lastNoExt && lastNoExt !== last)
+                            resourceFileMap.set(lastNoExt, file);
+                    }
+                }
+
+                for (const file of resourceFiles) {
+                    const rel = normalizeForLookup(
+                        file.webkitRelativePath || file.name,
+                    );
+                    const parts = rel.split("/");
+                    const resourceIdx = parts.lastIndexOf("resource");
+
+                    addKey(rel, file);
+                    addKey(file.name.toLowerCase(), file);
+
+                    if (resourceIdx >= 0) {
+                        addKey(parts.slice(resourceIdx).join("/"), file);
+                        addKey(parts.slice(resourceIdx + 1).join("/"), file);
+                    }
+                }
+
+                const folderStatus = document.getElementById("folderStatus");
+                folderStatus.textContent = resourceFiles.length
+                    ? `아이콘 소스: ${resourceFiles.length}개 파일`
+                    : "아이콘 소스: GitHub 저장소";
+            }
+
+            function collectItemTexts(item) {
+                return [
+                    item.nameKo,
+                    item.nameEn,
+                    item.descKo,
+                    item.descEn,
+                    item.singleKo,
+                    item.singleEn,
+                    item.shortId,
+                    item.msgidBase,
+                    item.baseKey,
+                    item.mainCat,
+                    item.dtName,
+                    item.loc,
+                ]
+                    .filter(Boolean)
+                    .join("\n");
+            }
+
+            function findIconPathInText(text) {
+                if (!text) return "";
+                const matches =
+                    text.match(
+                        /[A-Za-z]:\\[^"\n\r<>]+?\.(?:tga|png|dds|jpg|jpeg|webp|bmp)/gi,
+                    ) ||
+                    text.match(
+                        /(?:\/|\\)[^"\n\r<>]+?\.(?:tga|png|dds|jpg|jpeg|webp|bmp)/gi,
+                    ) ||
+                    [];
+                return matches.length ? matches[0] : "";
+            }
+
+            function extractIconPath(item) {
+                return findIconPathInText(collectItemTexts(item));
+            }
+
+            function getLookupCandidates(rawPath) {
+                const normalized = normalizeForLookup(rawPath);
+                if (!normalized) return [];
+
+                const candidates = new Set([normalized]);
+                const idxGame = normalized.indexOf("/game/");
+                const idxResource = normalized.indexOf("/resource/");
+
+                if (idxGame >= 0) candidates.add(normalized.slice(idxGame + 1));
+                if (idxResource >= 0) {
+                    candidates.add(normalized.slice(idxResource + 1));
+                    candidates.add(
+                        normalized.slice(idxResource + "/resource/".length),
+                    );
+                }
+
+                const noExt = normalized.replace(/\.[^.\/]+$/i, "");
+                if (noExt && noExt !== normalized) candidates.add(noExt);
+
+                const parts = normalized.split("/");
+                const last = parts.slice(-1)[0];
+                candidates.add(last);
+                candidates.add(last.replace(/\.[^.]+$/i, ""));
+
+                if (parts.length >= 2)
+                    candidates.add(parts.slice(-2).join("/"));
+                if (parts.length >= 3)
+                    candidates.add(parts.slice(-3).join("/"));
+
+                return Array.from(candidates).filter(Boolean);
+            }
+
+            function resolveResourceFile(rawPath) {
+                const candidates = getLookupCandidates(rawPath);
+                for (const key of candidates) {
+                    if (resourceFileMap.has(key))
+                        return resourceFileMap.get(key);
+                }
+
+                // 확장자가 없는 Unreal 경로용 보조 매칭
+                for (const key of candidates) {
+                    for (const [mapKey, file] of resourceFileMap.entries()) {
+                        if (mapKey === key) return file;
+                        if (mapKey.startsWith(key + ".")) return file;
+                        if (
+                            mapKey.endsWith("/" + key) ||
+                            mapKey.endsWith("/" + key + ".tga") ||
+                            mapKey.endsWith("/" + key + ".png")
+                        )
+                            return file;
+                    }
+                }
+
+                return null;
+            }
+
+            function readFileAsArrayBuffer(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () =>
+                        reject(reader.error || new Error("파일 읽기 실패"));
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+
+            function tgaToDataUrl(buffer) {
+                const bytes = new Uint8Array(buffer);
+                if (bytes.length < 18) throw new Error("잘못된 TGA 파일");
+
+                const idLength = bytes[0];
+                const imageType = bytes[2];
+                const width = bytes[12] | (bytes[13] << 8);
+                const height = bytes[14] | (bytes[15] << 8);
+                const pixelDepth = bytes[16];
+                const descriptor = bytes[17];
+
+                if (!width || !height) throw new Error("TGA 크기 정보 없음");
+                if (![2, 10].includes(imageType))
+                    throw new Error(`지원하지 않는 TGA 타입: ${imageType}`);
+                if (![24, 32].includes(pixelDepth))
+                    throw new Error(`지원하지 않는 픽셀 포맷: ${pixelDepth}`);
+
+                const bytesPerPixel = pixelDepth >> 3;
+                let offset = 18 + idLength;
+                const pixelCount = width * height;
+                const out = new Uint8ClampedArray(pixelCount * 4);
+
+                function writePixel(pixelIndex, b, g, r, a = 255) {
+                    const topOrigin = (descriptor & 0x20) !== 0;
+                    const x = pixelIndex % width;
+                    const y = Math.floor(pixelIndex / width);
+                    const targetY = topOrigin ? y : height - 1 - y;
+                    const outIndex = (targetY * width + x) * 4;
+                    out[outIndex] = r;
+                    out[outIndex + 1] = g;
+                    out[outIndex + 2] = b;
+                    out[outIndex + 3] = a;
+                }
+
+                if (imageType === 2) {
+                    for (let i = 0; i < pixelCount; i++) {
+                        const b = bytes[offset++];
+                        const g = bytes[offset++];
+                        const r = bytes[offset++];
+                        const a = bytesPerPixel === 4 ? bytes[offset++] : 255;
+                        writePixel(i, b, g, r, a);
+                    }
+                } else if (imageType === 10) {
+                    let i = 0;
+                    while (i < pixelCount) {
+                        const header = bytes[offset++];
+                        const isRle = (header & 0x80) !== 0;
+                        const count = (header & 0x7f) + 1;
+
+                        if (isRle) {
+                            const b = bytes[offset++];
+                            const g = bytes[offset++];
+                            const r = bytes[offset++];
+                            const a =
+                                bytesPerPixel === 4 ? bytes[offset++] : 255;
+                            for (
+                                let j = 0;
+                                j < count && i < pixelCount;
+                                j++, i++
+                            ) {
+                                writePixel(i, b, g, r, a);
+                            }
+                        } else {
+                            for (
+                                let j = 0;
+                                j < count && i < pixelCount;
+                                j++, i++
+                            ) {
+                                const b = bytes[offset++];
+                                const g = bytes[offset++];
+                                const r = bytes[offset++];
+                                const a =
+                                    bytesPerPixel === 4 ? bytes[offset++] : 255;
+                                writePixel(i, b, g, r, a);
+                            }
+                        }
+                    }
+                }
+
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                ctx.putImageData(new ImageData(out, width, height), 0, 0);
+                return canvas.toDataURL("image/png");
+            }
+
+            async function getImageUrlForPath(rawPath) {
+                if (!rawPath) return null;
+                if (imageUrlCache.has(rawPath))
+                    return imageUrlCache.get(rawPath);
+
+                const normalized = normalizeGameAssetPath(rawPath);
+                const marker = "Game/UI/resource/";
+                const idx = normalized.indexOf(marker);
+                if (idx < 0) {
+                    imageUrlCache.set(rawPath, null);
+                    return null;
+                }
+
+                const rel = normalized.slice(idx + marker.length);
+                const extCandidates = /\.[a-z0-9]+$/i.test(rel)
+                    ? [rel]
+                    : [
+                          rel + ".png",
+                          rel + ".webp",
+                          rel + ".jpg",
+                          rel + ".jpeg",
+                          rel + ".bmp",
+                          rel + ".tga",
+                          rel + ".TGA",
+                      ];
+
+                for (const relPath of extCandidates) {
+                    const url = REPO_CONFIG.RESOURCE_BASE + relPath;
+                    try {
+                        if (/\.tga$/i.test(relPath)) {
+                            const res = await fetch(url, { cache: "no-store" });
+                            if (!res.ok) continue;
+                            const buffer = await res.arrayBuffer();
+                            const dataUrl = tgaToDataUrl(buffer);
+                            imageUrlCache.set(rawPath, dataUrl);
+                            return dataUrl;
+                        } else {
+                            const ok = await new Promise((resolve) => {
+                                const img = new Image();
+                                img.onload = () => resolve(true);
+                                img.onerror = () => resolve(false);
+                                img.src = url;
+                            });
+                            if (ok) {
+                                imageUrlCache.set(rawPath, url);
+                                return url;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("아이콘 로드 실패:", url, err);
+                    }
+                }
+
+                imageUrlCache.set(rawPath, null);
+                return null;
+            }
+
+            async function renderIconCell(item) {
+                const candidates = getIconCandidates(item);
+                const rawPath =
+                    candidates.find(Boolean) || extractIconPath(item);
+
+                if (!rawPath) {
+                    return `<td class="icon-cell"><div class="icon-box"><div class="icon-empty">아이콘<br>없음</div></div><div class="icon-path">매핑 또는 원본 경로 없음</div></td>`;
+                }
+
+                let url = null;
+                let matchedPath = rawPath;
+
+                for (const candidate of candidates.length
+                    ? candidates
+                    : [rawPath]) {
+                    url = await getImageUrlForPath(candidate);
+                    if (url) {
+                        matchedPath = candidate;
+                        break;
+                    }
+                }
+
+                const pathHtml = `<div class="icon-path">${escapeHtml(matchedPath)}</div>`;
+
+                if (!url) {
+                    return `<td class="icon-cell"><div class="icon-box"><div class="icon-empty">파일<br>미매칭</div></div>${pathHtml}</td>`;
+                }
+
+                return `<td class="icon-cell"><div class="icon-box"><img src="${url}" alt="icon"></div>${pathHtml}</td>`;
+            }
+
+            // JSON 매핑 파일 기반 아이콘 경로 맵
+            let externalIconMap = {};
+
+            function normalizeGameAssetPath(picValue) {
+                if (!picValue) return "";
+                let s = String(picValue).trim();
+
+                const unrealMatch = s.match(/'([^']+)'/);
+                if (unrealMatch) s = unrealMatch[1];
+
+                s = s.replace(/^\/+/, "");
+
+                const dotIdx = s.lastIndexOf(".");
+                const slashIdx = s.lastIndexOf("/");
+                if (dotIdx > slashIdx) s = s.slice(0, dotIdx);
+
+                return s;
+            }
+
+            function getMappedIconPath(item) {
+                const keyCandidates = [
+                    String(item.shortId || "").trim(),
+                    String(item.msgidBase || "").trim(),
+                    String(item.nameKo || "").trim(),
+                    String(item.nameEn || "").trim(),
+                ].filter(Boolean);
+
+                for (const key of keyCandidates) {
+                    if (externalIconMap[key])
+                        return normalizeGameAssetPath(externalIconMap[key]);
+                }
+                return "";
+            }
+
+            const giftSourceLabelMap = {
+                BornBuLuoCiTiao: "부족 특성",
+                BornChuShen: "출신 특성",
+                ChengHao: "칭호",
+                JingLi: "경험",
+                Normal: "일반",
+                XiHao: "취향",
+                XingGe: "성격",
+            };
+
+            function getGiftSourceLabel(value) {
+                return giftSourceLabelMap[value] || value || "";
+            }
+
+            let giftMappingData = [];
+            let giftMapById = {};
+            let giftUIEnabled = true;
+
+            function parseNsLocTextValue(s) {
+                if (!s) return "";
+                const m = String(s).match(
+                    /NSLOCTEXT\([^,]+,[^,]+,\s*"([\s\S]*?)"\s*\)$/,
+                );
+                return m ? m[1] : String(s);
+            }
+
+            async function parseJsonFileGeneric(file) {
+                if (!file) return null;
+                const raw = await file.arrayBuffer();
+                const bytes = new Uint8Array(raw);
+                let text = "";
+                if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xff &&
+                    bytes[1] === 0xfe
+                ) {
+                    text = new TextDecoder("utf-16le").decode(bytes);
+                } else if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xfe &&
+                    bytes[1] === 0xff
+                ) {
+                    text = new TextDecoder("utf-16be").decode(bytes);
+                } else if (
+                    bytes.length >= 3 &&
+                    bytes[0] === 0xef &&
+                    bytes[1] === 0xbb &&
+                    bytes[2] === 0xbf
+                ) {
+                    text = new TextDecoder("utf-8").decode(bytes);
+                } else {
+                    try {
+                        text = new TextDecoder("utf-8").decode(bytes);
+                        JSON.parse(text);
+                    } catch (e) {
+                        text = new TextDecoder("utf-16le").decode(bytes);
+                    }
+                }
+                return JSON.parse(text);
+            }
+
+            async function loadGiftJsonDetails(file) {
+                giftMappingData = [];
+                giftMapById = {};
+                if (!file) {
+                    refreshGiftFilterOptions();
+                    return;
+                }
+                const arr = await parseJsonFileGeneric(file);
+                if (Array.isArray(arr)) {
+                    giftMappingData = arr.map((obj) => ({
+                        id: String(obj?.ID ?? obj?.Name ?? "").trim(),
+                        name: String(obj?.Name ?? "").trim(),
+                        star: obj?.Star ?? "",
+                        effect: String(obj?.NGEffect ?? "").trim(),
+                        source: String(obj?.NGEffectSource ?? "").trim(),
+                        attrType: String(obj?.NGEffectAttrType ?? "").trim(),
+                        pic: String(obj?.Pic ?? "").trim(),
+                        title: parseNsLocTextValue(obj?.Title ?? ""),
+                        desc: parseNsLocTextValue(obj?.Desc ?? ""),
+                        fuzzy: String(obj?.MoHuDesc ?? "").trim(),
+                        raw: obj,
+                    }));
+                    for (const row of giftMappingData) {
+                        if (row.id) giftMapById[row.id] = row;
+                        if (row.name && !giftMapById[row.name])
+                            giftMapById[row.name] = row;
+                    }
+                }
+                refreshGiftFilterOptions();
+            }
+
+            function refreshGiftFilterOptions() {
+                const stars = [
+                    ...new Set(
+                        giftMappingData
+                            .map((x) => String(x.star))
+                            .filter(Boolean),
+                    ),
+                ].sort((a, b) => Number(a) - Number(b));
+                const effects = [
+                    ...new Set(
+                        giftMappingData.map((x) => x.effect).filter(Boolean),
+                    ),
+                ].sort();
+                const sources = [
+                    ...new Set(
+                        giftMappingData.map((x) => x.source).filter(Boolean),
+                    ),
+                ].sort();
+                const starSel = document.getElementById("giftStarFilter");
+                const effectSel = document.getElementById("giftEffectFilter");
+                const sourceSel = document.getElementById("giftSourceFilter");
+                if (!starSel) return;
+
+                const prevStar = starSel.value,
+                    prevEffect = effectSel.value,
+                    prevSource = sourceSel.value;
+                starSel.innerHTML =
+                    '<option value="">전체 등급</option>' +
+                    stars
+                        .map(
+                            (v) =>
+                                `<option value="${escapeHtml(v)}">${escapeHtml(v)}성</option>`,
+                        )
+                        .join("");
+                effectSel.innerHTML =
+                    '<option value="">전체 효과</option>' +
+                    effects
+                        .map(
+                            (v) =>
+                                `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`,
+                        )
+                        .join("");
+                sourceSel.innerHTML =
+                    '<option value="">전체 출처</option>' +
+                    sources
+                        .map(
+                            (v) =>
+                                `<option value="${escapeHtml(v)}">${escapeHtml(getGiftSourceLabel(v))}</option>`,
+                        )
+                        .join("");
+                starSel.value = prevStar;
+                effectSel.value = prevEffect;
+                sourceSel.value = prevSource;
+            }
+
+            function enrichGiftItem(item) {
+                const meta =
+                    giftMapById[String(item.shortId || "")] ||
+                    giftMapById[String(item.msgidBase || "")] ||
+                    null;
+                if (!meta) return item;
+                return {
+                    ...item,
+                    giftMeta: meta,
+                    pic: meta.pic || item.pic,
+                    iconPath: meta.pic || item.iconPath,
+                    nameKo: item.nameKo || meta.title || item.nameKo,
+                    descKo: item.descKo || meta.desc || item.descKo,
+                };
+            }
+
+            function getGiftFilteredData(base) {
+                const starVal =
+                    document.getElementById("giftStarFilter")?.value || "";
+                const effectVal =
+                    document.getElementById("giftEffectFilter")?.value || "";
+                const sourceVal =
+                    document.getElementById("giftSourceFilter")?.value || "";
+                return base.filter((item) => {
+                    const meta =
+                        item.giftMeta ||
+                        giftMapById[String(item.shortId || "")];
+                    if (starVal && String(meta?.star ?? "") !== starVal)
+                        return false;
+                    if (effectVal && String(meta?.effect ?? "") !== effectVal)
+                        return false;
+                    if (sourceVal && String(meta?.source ?? "") !== sourceVal)
+                        return false;
+                    return true;
+                });
+            }
+
+            function updateGiftSummary(items) {
+                const countEl = document.getElementById("summaryCount");
+                const catEl = document.getElementById("summaryCategory");
+                const starEl = document.getElementById("summaryStars");
+                const effEl = document.getElementById("summaryEffects");
+                if (!countEl) return;
+                countEl.textContent = String(items.length);
+                catEl.textContent =
+                    currentFilterType === "SUB"
+                        ? currentFilterValue
+                        : currentFilterType === "ALL"
+                          ? "전체 보기"
+                          : "DT_GiftZongBiao";
+                const starMap = {};
+                const effMap = {};
+                for (const item of items) {
+                    const meta = item.giftMeta || {};
+                    if (meta.star)
+                        starMap[meta.star] = (starMap[meta.star] || 0) + 1;
+                    if (meta.effect)
+                        effMap[meta.effect] = (effMap[meta.effect] || 0) + 1;
+                }
+                starEl.textContent = Object.keys(starMap).length
+                    ? Object.entries(starMap)
+                          .sort((a, b) => Number(a[0]) - Number(b[0]))
+                          .map(([k, v]) => `${k}성 ${v}`)
+                          .join(" / ")
+                    : "-";
+                effEl.textContent = Object.keys(effMap).length
+                    ? Object.entries(effMap)
+                          .sort((a, b) => b[1] - a[1])
+                          .slice(0, 3)
+                          .map(([k, v]) => `${k} ${v}`)
+                          .join(" / ")
+                    : "-";
+            }
+
+            function bindGiftMainButton() {
+                const btn = document.getElementById("giftMainBtn");
+                if (!btn || btn.dataset.bound) return;
+                btn.dataset.bound = "1";
+                btn.addEventListener("click", () => {
+                    const target = Array.from(
+                        document.querySelectorAll("#categoryList .sub-cat"),
+                    ).find((el) =>
+                        (el.textContent || "").includes("DT_GiftZongBiao"),
+                    );
+                    if (target) {
+                        // 상위 아코디언 펼치기
+                        const group = target.parentElement;
+                        if (group && !group.classList.contains("expanded")) {
+                            group.classList.add("expanded");
+                            const mainDiv = group.previousElementSibling;
+                            const icon = mainDiv?.querySelector(".toggle-icon");
+                            if (icon) icon.innerText = "▼";
+                        }
+                        target.click();
+                    }
+                });
+            }
+
+            function ensureGiftDefaultView() {
+                const target = Array.from(
+                    document.querySelectorAll("#categoryList .sub-cat"),
+                ).find((el) =>
+                    (el.textContent || "").includes("DT_GiftZongBiao"),
+                );
+                if (target) target.click();
+            }
+
+            function setupGiftToolbarEvents() {
+                [
+                    "giftStarFilter",
+                    "giftEffectFilter",
+                    "giftSourceFilter",
+                ].forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el && !el.dataset.bound) {
+                        el.dataset.bound = "1";
+                        el.addEventListener("change", () => renderTable());
+                    }
+                });
+            }
+
+            async function loadMappingFile(file) {
+                if (!file) {
+                    externalIconMap = externalIconMap || {};
+                    const status = document.getElementById("mappingStatus");
+                    if (status)
+                        status.textContent = `매핑 데이터: 내장 ${Object.keys(externalIconMap).length}개`;
+                    return;
+                }
+
+                const raw = await file.arrayBuffer();
+                const bytes = new Uint8Array(raw);
+                let text = "";
+
+                // UTF-16 BOM / UTF-8 BOM 대응
+                if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xff &&
+                    bytes[1] === 0xfe
+                ) {
+                    text = new TextDecoder("utf-16le").decode(bytes);
+                } else if (
+                    bytes.length >= 2 &&
+                    bytes[0] === 0xfe &&
+                    bytes[1] === 0xff
+                ) {
+                    text = new TextDecoder("utf-16be").decode(bytes);
+                } else if (
+                    bytes.length >= 3 &&
+                    bytes[0] === 0xef &&
+                    bytes[1] === 0xbb &&
+                    bytes[2] === 0xbf
+                ) {
+                    text = new TextDecoder("utf-8").decode(bytes);
+                } else {
+                    try {
+                        text = new TextDecoder("utf-8").decode(bytes);
+                        JSON.parse(text);
+                    } catch (e) {
+                        text = new TextDecoder("utf-16le").decode(bytes);
+                    }
+                }
+
+                const arr = JSON.parse(text);
+                const nextMap = {};
+
+                if (Array.isArray(arr)) {
+                    for (const obj of arr) {
+                        const name = String(obj?.Name ?? "").trim();
+                        const id = String(obj?.ID ?? "").trim();
+                        const pic = String(obj?.Pic ?? "").trim();
+                        if (!pic) continue;
+                        if (name) nextMap[name] = pic;
+                        if (id && id !== "0") nextMap[id] = pic;
+                    }
+                } else if (arr && typeof arr === "object") {
+                    for (const [k, v] of Object.entries(arr)) {
+                        if (typeof v === "string") nextMap[String(k)] = v;
+                        else if (v && typeof v === "object" && v.Pic)
+                            nextMap[String(k)] = String(v.Pic);
+                    }
+                }
+
+                externalIconMap = nextMap;
+
+                const status = document.getElementById("mappingStatus");
+                if (status)
+                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
+            }
+
+            function applyMappingObject(arr) {
+                const nextMap = {};
+                if (Array.isArray(arr)) {
+                    for (const obj of arr) {
+                        const name = String(obj?.Name ?? "").trim();
+                        const id = String(obj?.ID ?? "").trim();
+                        const pic = String(obj?.Pic ?? "").trim();
+                        if (!pic) continue;
+                        if (name) nextMap[name] = pic;
+                        if (id && id !== "0") nextMap[id] = pic;
+                    }
+                } else if (arr && typeof arr === "object") {
+                    for (const [k, v] of Object.entries(arr)) {
+                        if (typeof v === "string") nextMap[String(k)] = v;
+                        else if (v && typeof v === "object" && v.Pic)
+                            nextMap[String(k)] = String(v.Pic);
+                    }
+                }
+                externalIconMap = nextMap;
+                const status = document.getElementById("mappingStatus");
+                if (status)
+                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
+            }
+
+            function applyGiftJsonDetails(arr) {
+                giftMappingData = [];
+                giftMapById = {};
+                if (Array.isArray(arr)) {
+                    giftMappingData = arr.map((obj) => ({
+                        id: String(obj?.ID ?? obj?.Name ?? "").trim(),
+                        name: String(obj?.Name ?? "").trim(),
+                        star: obj?.Star ?? "",
+                        effect: String(obj?.NGEffect ?? "").trim(),
+                        source: String(obj?.NGEffectSource ?? "").trim(),
+                        attrType: String(obj?.NGEffectAttrType ?? "").trim(),
+                        pic: String(obj?.Pic ?? "").trim(),
+                        title: parseNsLocTextValue(obj?.Title ?? ""),
+                        desc: parseNsLocTextValue(obj?.Desc ?? ""),
+                        fuzzy: String(obj?.MoHuDesc ?? "").trim(),
+                        raw: obj,
+                    }));
+                    for (const row of giftMappingData) {
+                        if (row.id) giftMapById[row.id] = row;
+                        if (row.name && !giftMapById[row.name])
+                            giftMapById[row.name] = row;
+                    }
+                }
+                refreshGiftFilterOptions();
+            }
+
+            async function processFiles() {
+                document.getElementById("loading").style.display = "block";
+                updateRepoStatus("저장소 파일 불러오는 중...");
+
+                setTimeout(async () => {
+                    try {
+                        imageUrlCache.clear();
+
+                        const [koText, enText, mappingJson] = await Promise.all(
+                            [
+                                fetchTextFile(REPO_CONFIG.KO_PO_URL),
+                                fetchTextFile(REPO_CONFIG.EN_PO_URL).catch(
+                                    () => "",
+                                ),
+                                fetchJsonFile(REPO_CONFIG.MAPPING_JSON_URL),
+                            ],
+                        );
+
+                        applyMappingObject(mappingJson);
+                        applyGiftJsonDetails(mappingJson);
+
+                        const koRecords = parsePO(koText);
+                        const enRecordsArray = enText ? parsePO(enText) : [];
+
+                        const enRecordsMap = {};
+                        for (const en of enRecordsArray) {
+                            const key = en.ctxt || en.id;
+                            enRecordsMap[key] = en.str;
+                        }
+
+                        const groups = {};
+
+                        for (const koData of koRecords) {
+                            const loc = koData.loc;
+                            const strKo = koData.str;
+                            const msgid = koData.id;
+                            const ctxt = koData.ctxt;
+
+                            const lookupKey = ctxt || msgid;
+                            const strEn = enRecordsMap[lookupKey] || "";
+
+                            let mainCategory = "기타 (Etc)";
+                            let dataTable = "Unknown";
+
+                            const dtMatch = loc.match(
+                                /DataTable\/([^\/]+)\/([^\.]+)/,
+                            );
+                            if (dtMatch) {
+                                mainCategory = dtMatch[1];
+                                dataTable = dtMatch[2];
+                            } else {
+                                const fallbackMatch = loc.match(
+                                    /\/Game\/([^\/]+)\/.*\/([^\.]+)/,
+                                );
+                                if (fallbackMatch) {
+                                    mainCategory = fallbackMatch[1] + " (Etc)";
+                                    dataTable = fallbackMatch[2];
+                                }
+                            }
+
+                            let type = "single";
+                            let baseKey = lookupKey;
+                            let shortId = msgid;
+
+                            const locEndMatch =
+                                loc.match(/\.(Name|Title|Desc)$/i);
+                            const idEndMatch =
+                                msgid.match(/_(Name|Title|Desc)$/i);
+
+                            if (locEndMatch) {
+                                type = locEndMatch[1].toLowerCase();
+                                baseKey = loc.replace(
+                                    /\.(Name|Title|Desc)$/i,
+                                    "",
+                                );
+                                shortId = baseKey.split(".").pop();
+                            } else if (idEndMatch) {
+                                type = idEndMatch[1].toLowerCase();
+                                baseKey = msgid.replace(
+                                    /_(Name|Title|Desc)$/i,
+                                    "",
+                                );
+                                shortId = baseKey.split("_").pop();
+                            }
+
+                            if (!groups[baseKey]) {
+                                groups[baseKey] = {
+                                    baseKey: baseKey,
+                                    shortId: shortId,
+                                    msgidBase: msgid,
+                                    mainCat: mainCategory,
+                                    dtName: dataTable,
+                                    nameKo: "",
+                                    nameEn: "",
+                                    descKo: "",
+                                    descEn: "",
+                                    singleKo: "",
+                                    singleEn: "",
+                                    isGrouped: false,
+                                };
+                            }
+
+                            if (type === "name" || type === "title") {
+                                groups[baseKey].nameKo = strKo;
+                                groups[baseKey].nameEn = strEn;
+                                groups[baseKey].isGrouped = true;
+                            } else if (type === "desc") {
+                                groups[baseKey].descKo = strKo;
+                                groups[baseKey].descEn = strEn;
+                                groups[baseKey].isGrouped = true;
+                            } else {
+                                groups[baseKey].singleKo = strKo;
+                                groups[baseKey].singleEn = strEn;
+                            }
+                        }
+
+                        globalData = Object.values(groups);
+                        renderCategories();
+                        setupGiftToolbarEvents();
+                        bindGiftMainButton();
+                        selectFilter(
+                            "ALL",
+                            "",
+                            document.getElementById("allCatBtn"),
+                        );
+                        updateRepoStatus(
+                            `로드 완료: PO ${koRecords.length}개, 영문 ${enRecordsArray.length}개, 매핑 ${Object.keys(externalIconMap).length}개`,
+                        );
+                    } catch (e) {
+                        console.error(e);
+                        updateRepoStatus("로드 실패");
+                        alert(
+                            "저장소 파일 로딩 오류: " +
+                                e.message +
+                                "\n\n확인사항:\n1. data 폴더 경로\n2. JSON 인코딩\n3. GitHub Pages에 실제 업로드된 파일명 대소문자",
+                        );
+                    } finally {
+                        document.getElementById("loading").style.display =
+                            "none";
+                    }
+                }, 30);
+            }
+
+            function renderCategories() {
+                const container = document.getElementById("categoryList");
+                container.innerHTML = "<h3>분류 (대분류 / 소분류)</h3>";
+
+                const tree = {};
+                globalData.forEach((item) => {
+                    if (!tree[item.mainCat]) tree[item.mainCat] = new Set();
+                    tree[item.mainCat].add(item.dtName);
+                });
+
+                const allDiv = document.createElement("div");
+                allDiv.className = "cat-item main-cat";
+                allDiv.id = "allCatBtn";
+                allDiv.innerHTML = `<span>전체 보기</span> <span class="cat-count">${globalData.length}</span>`;
+                allDiv.onclick = () => selectFilter("ALL", "", allDiv);
+                container.appendChild(allDiv);
+
+                const sortedMains = Object.keys(tree).sort((a, b) => {
+                    const ap =
+                        a === "NaturalGift"
+                            ? -100
+                            : a.includes("기타")
+                              ? 50
+                              : 0;
+                    const bp =
+                        b === "NaturalGift"
+                            ? -100
+                            : b.includes("기타")
+                              ? 50
+                              : 0;
+                    if (ap !== bp) return ap - bp;
+                    return a.localeCompare(b);
+                });
+
+                sortedMains.forEach((mainCat, index) => {
+                    const mainCount = globalData.filter(
+                        (d) => d.mainCat === mainCat,
+                    ).length;
+
+                    const mainDiv = document.createElement("div");
+                    mainDiv.className = "cat-item main-cat";
+                    mainDiv.innerHTML = `<span><span class="toggle-icon">▶</span> 📁 ${mainCat}</span> <span class="cat-count">${mainCount}</span>`;
+
+                    const subGroup = document.createElement("div");
+                    subGroup.className = "sub-cat-group";
+
+                    mainDiv.onclick = () => {
+                        const isExpanded =
+                            subGroup.classList.contains("expanded");
+
+                        if (isExpanded) {
+                            subGroup.classList.remove("expanded");
+                            mainDiv.querySelector(".toggle-icon").innerText =
+                                "▶";
+                        } else {
+                            subGroup.classList.add("expanded");
+                            mainDiv.querySelector(".toggle-icon").innerText =
+                                "▼";
+                        }
+
+                        selectFilter("MAIN", mainCat, mainDiv);
+                    };
+
+                    container.appendChild(mainDiv);
+
+                    const sortedSubs = Array.from(tree[mainCat]).sort(
+                        (a, b) => {
+                            if (a === "DT_GiftZongBiao") return -1;
+                            if (b === "DT_GiftZongBiao") return 1;
+                            return a.localeCompare(b);
+                        },
+                    );
+                    sortedSubs.forEach((subCat) => {
+                        const subCount = globalData.filter(
+                            (d) => d.mainCat === mainCat && d.dtName === subCat,
+                        ).length;
+                        const subDiv = document.createElement("div");
+                        subDiv.className = "cat-item sub-cat";
+                        subDiv.innerHTML = `<span>${subCat}</span> <span class="cat-count">${subCount}</span>`;
+
+                        subDiv.onclick = (e) => {
+                            e.stopPropagation();
+                            selectFilter("SUB", subCat, subDiv);
+                        };
+                        subGroup.appendChild(subDiv);
+                    });
+
+                    container.appendChild(subGroup);
+                });
+            }
+
+            function selectFilter(filterType, filterValue, element) {
+                currentFilterType = filterType;
+                currentFilterValue = filterValue;
+
+                document
+                    .querySelectorAll("#categoryList .cat-item")
+                    .forEach((el) => el.classList.remove("active"));
+                if (element) element.classList.add("active");
+
+                renderTable();
+            }
+
+            function getIconCandidates(item) {
+                const candidates = [];
+                const mapped = getMappedIconPath(item);
+                if (mapped) {
+                    candidates.push(mapped);
+                }
+
+                const rawCandidates = [
+                    item.iconPath,
+                    item.pic,
+                    item.icon,
+                    item.image,
+                    item.texture,
+                    item.IconPath,
+                    item.Pic,
+                ].filter(Boolean);
+
+                for (const raw of rawCandidates) {
+                    let s = String(raw).trim();
+                    if (/^Texture2D'/i.test(s) || s.includes("/Game/")) {
+                        s = normalizeGameAssetPath(s);
+                    }
+                    if (s) candidates.push(s);
+                }
+
+                return [...new Set(candidates)];
+            }
+
+            async function renderTable() {
+                const term = document
+                    .getElementById("search")
+                    .value.toLowerCase();
+                const tbody = document.getElementById("tableBody");
+                const status = document.getElementById("statusText");
+
+                let filtered = globalData
+                    .filter((item) => {
+                        if (
+                            currentFilterType === "MAIN" &&
+                            item.mainCat !== currentFilterValue
+                        )
+                            return false;
+                        if (
+                            currentFilterType === "SUB" &&
+                            item.dtName !== currentFilterValue
+                        )
+                            return false;
+
+                        if (!term) return true;
+                        return (
+                            item.nameKo.toLowerCase().includes(term) ||
+                            item.descKo.toLowerCase().includes(term) ||
+                            item.singleKo.toLowerCase().includes(term) ||
+                            item.shortId.toLowerCase().includes(term) ||
+                            item.msgidBase.toLowerCase().includes(term)
+                        );
+                    })
+                    .map(enrichGiftItem);
+
+                const isGiftView =
+                    (currentFilterType === "SUB" &&
+                        currentFilterValue === "DT_GiftZongBiao") ||
+                    (currentFilterType === "MAIN" &&
+                        currentFilterValue === "NaturalGift") ||
+                    (currentFilterType === "ALL" && giftUIEnabled);
+
+                if (isGiftView) {
+                    filtered = filtered.filter(
+                        (item) => item.dtName === "DT_GiftZongBiao",
+                    );
+                    filtered = getGiftFilteredData(filtered);
+                }
+
+                status.innerText = `총 ${filtered.length} 세트`;
+                updateGiftSummary(filtered);
+
+                let html = "";
+                const limit = Math.min(filtered.length, 1000);
+
+                for (let i = 0; i < limit; i++) {
+                    const item = filtered[i];
+                    const iconCellHtml = await renderIconCell(item);
+
+                    html += `<tr>${iconCellHtml}
             <td>
                 <div class="dt-name">${item.dtName}</div>
                 <div class="key-id">ID: ${item.shortId}</div>
             </td>`;
-            
-        if (item.isGrouped) {
-            html += `
+
+                    if (item.isGrouped) {
+                        html += `
             <td>
                 <div class="str-ko">${item.nameKo || '<span style="color:#555">(이름 없음)</span>'}</div>
                 <div class="str-en">${item.nameEn}</div>
@@ -1090,36 +1810,36 @@ async function renderTable() {
                 <div class="str-ko">${item.descKo || '<span style="color:#555">(설명 없음)</span>'}</div>
                 <div class="str-en">${item.descEn}</div>
             </td>`;
-        } else {
-            html += `
+                    } else {
+                        html += `
             <td colspan="2">
                 <div class="single-item">
                     <div class="str-ko">${item.singleKo}</div>
                     <div class="str-en">${item.singleEn}</div>
                 </div>
             </td>`;
-        }
-        html += `</tr>`;
-    }
-    
-    if (filtered.length > 1000) {
-        html += `<tr><td colspan="4" style="text-align:center; color:#f39c12; padding:20px;">결과가 너무 많습니다 (상위 1000개 제한). 검색어를 입력해주세요.</td></tr>`;
-    } else if (filtered.length === 0) {
-        html += `<tr><td colspan="4" style="text-align:center; padding: 30px; color: #777;">검색 결과가 없습니다.</td></tr>`;
-    }
+                    }
+                    html += `</tr>`;
+                }
 
-    tbody.innerHTML = html;
-}
+                if (filtered.length > 1000) {
+                    html += `<tr><td colspan="4" style="text-align:center; color:#f39c12; padding:20px;">결과가 너무 많습니다 (상위 1000개 제한). 검색어를 입력해주세요.</td></tr>`;
+                } else if (filtered.length === 0) {
+                    html += `<tr><td colspan="4" style="text-align:center; padding: 30px; color: #777;">검색 결과가 없습니다.</td></tr>`;
+                }
 
-let timeout = null;
-document.getElementById('search').addEventListener('input', () => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => renderTable(), 300);
-});
+                tbody.innerHTML = html;
+            }
 
-window.addEventListener('DOMContentLoaded', () => {
-    processFiles();
-});
-</script>
-</body>
+            let timeout = null;
+            document.getElementById("search").addEventListener("input", () => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => renderTable(), 300);
+            });
+
+            window.addEventListener("DOMContentLoaded", () => {
+                processFiles();
+            });
+        </script>
+    </body>
 </html>

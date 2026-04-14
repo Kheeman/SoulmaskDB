@@ -1,0 +1,109 @@
+Begin Object Class=/Script/Engine.Material Name="MUI_XiangZiFenLeiIcon"
+   Begin Object Class=/Script/Engine.MaterialExpressionMultiply Name="MaterialExpressionMultiply_10"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionMultiply Name="MaterialExpressionMultiply_6"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionScalarParameter Name="MaterialExpressionScalarParameter_3"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionTextureSampleParameter2D Name="MaterialExpressionTextureSampleParameter2D_0"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionVectorParameter Name="MaterialExpressionVectorParameter_0"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionVectorParameter Name="MaterialExpressionVectorParameter_2"
+   End Object
+   Begin Object Class=/Script/Engine.MaterialExpressionVectorParameter Name="MaterialExpressionVectorParameter_3"
+   End Object
+   Begin Object Class=/Script/UnrealEd.SceneThumbnailInfoWithPrimitive Name="SceneThumbnailInfoWithPrimitive_0"
+   End Object
+   Begin Object Name="MaterialExpressionMultiply_10"
+      A=(Expression=MaterialExpressionVectorParameter'"MUI_XiangZiFenLeiIcon:MaterialExpressionVectorParameter_3"',Mask=1,MaskR=1,MaskG=1,MaskB=1)
+      B=(Expression=MaterialExpressionVectorParameter'"MUI_XiangZiFenLeiIcon:MaterialExpressionVectorParameter_3"',OutputIndex=4,Mask=1,MaskA=1)
+      MaterialExpressionEditorX=-128
+      MaterialExpressionEditorY=480
+      MaterialExpressionGuid=DDA77D594E4D478BEC3C619A18764722
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionMultiply_6"
+      A=(Expression=MaterialExpressionVectorParameter'"MUI_XiangZiFenLeiIcon:MaterialExpressionVectorParameter_2"',Mask=1,MaskR=1,MaskG=1,MaskB=1)
+      B=(Expression=MaterialExpressionVectorParameter'"MUI_XiangZiFenLeiIcon:MaterialExpressionVectorParameter_2"',OutputIndex=4,Mask=1,MaskA=1)
+      MaterialExpressionEditorX=-64
+      MaterialExpressionEditorY=-144
+      MaterialExpressionGuid=B5BEEC4245AAEED7A12799BBD321A16A
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionScalarParameter_3"
+      ExpressionGUID=83DEB94C4AF6E38CBC6C718F244A2BBC
+      MaterialExpressionEditorX=112
+      MaterialExpressionEditorY=112
+      MaterialExpressionGuid=6AD21DFC4D10CDD3EDDFF5AF8B3547A8
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionTextureSampleParameter2D_0"
+      ParameterName="SlateUI"
+      ExpressionGUID=9A24037F48265F19AF827590D5946A6F
+      Texture=Texture2D'"/Game/UI/resource/JianYingIcon/XiangZiFenLeiicon/xiangzifenlei_banchengpin.xiangzifenlei_banchengpin"'
+      MaterialExpressionEditorX=-336
+      MaterialExpressionEditorY=208
+      MaterialExpressionGuid=99643242426329EF8B9ADEAD7A765889
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionVectorParameter_0"
+      DefaultValue=(R=0.000000,G=0.620889,B=0.000000,A=1.000000)
+      ExpressionGUID=E264A04C41CF51C42915B9BB46F99FD1
+      MaterialExpressionEditorX=-336
+      MaterialExpressionEditorY=-16
+      MaterialExpressionGuid=C886A190469450E98F44F9927BA7D5B9
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionVectorParameter_2"
+      DefaultValue=(R=1.000000,G=1.000000,B=1.000000,A=1.000000)
+      ParameterName="Param_1"
+      ExpressionGUID=51B77E1447EB6BEB04CEFC91C8AFAA1F
+      MaterialExpressionEditorX=-336
+      MaterialExpressionEditorY=-208
+      MaterialExpressionGuid=8C02A59A4EAEFED18953B8A693BD73E9
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="MaterialExpressionVectorParameter_3"
+      DefaultValue=(R=0.931252,G=1.000000,B=1.000000,A=0.150000)
+      ParameterName="Param_2"
+      ExpressionGUID=B5ADB2324064A035B0FCCF98DB82F262
+      MaterialExpressionEditorX=-352
+      MaterialExpressionEditorY=448
+      MaterialExpressionGuid=E96CAD644EF966B3C9EC37A25C2912E0
+      Material=Material'"MUI_XiangZiFenLeiIcon"'
+   End Object
+   Begin Object Name="SceneThumbnailInfoWithPrimitive_0"
+   End Object
+   BaseColor=(Expression=MaterialExpressionMultiply'"MaterialExpressionMultiply_6"')
+   Metallic=(Expression=MaterialExpressionVectorParameter'"MaterialExpressionVectorParameter_0"',OutputIndex=1,Mask=1,MaskR=1)
+   Roughness=(Expression=MaterialExpressionVectorParameter'"MaterialExpressionVectorParameter_0"',OutputIndex=2,Mask=1,MaskG=1)
+   EmissiveColor=(Expression=MaterialExpressionMultiply'"MaterialExpressionMultiply_10"')
+   Opacity=(Expression=MaterialExpressionScalarParameter'"MaterialExpressionScalarParameter_3"')
+   OpacityMask=(Expression=MaterialExpressionTextureSampleParameter2D'"MaterialExpressionTextureSampleParameter2D_0"',OutputIndex=4,Mask=1,MaskA=1)
+   BlendMode=BLEND_Masked
+   ShadingModel=MSM_Unlit
+   ShadingModels=(ShadingModelField=1)
+   TwoSided=True
+   EditorX=416
+   EditorY=-16
+   Expressions(0)=MaterialExpressionTextureSampleParameter2D'"MaterialExpressionTextureSampleParameter2D_0"'
+   Expressions(1)=MaterialExpressionVectorParameter'"MaterialExpressionVectorParameter_0"'
+   Expressions(2)=MaterialExpressionVectorParameter'"MaterialExpressionVectorParameter_2"'
+   Expressions(3)=MaterialExpressionMultiply'"MaterialExpressionMultiply_6"'
+   Expressions(4)=MaterialExpressionVectorParameter'"MaterialExpressionVectorParameter_3"'
+   Expressions(5)=MaterialExpressionMultiply'"MaterialExpressionMultiply_10"'
+   Expressions(6)=MaterialExpressionScalarParameter'"MaterialExpressionScalarParameter_3"'
+   ParameterGroupData(0)=(GroupName="None")
+   ParameterGroupData(1)=(GroupName="None")
+   ParameterGroupData(2)=(GroupName="None")
+   ParameterGroupData(3)=(GroupName="None")
+   ParameterGroupData(4)=(GroupName="None")
+   StateId=D8BDE0DE4ADFDF60C7EB7ABE6410A9CB
+   CachedExpressionData=(Parameters=(RuntimeEntries[0]=(NameHashes=(10371715421228879687),ParameterInfos=((Name="Param")),ExpressionGuids=(83DEB94C4AF6E38CBC6C718F244A2BBC)),RuntimeEntries[1]=(NameHashes=(5715783085211599032,10371715421228879687,15475405593545223188),ParameterInfos=((Name="Param_1"),(Name="Param"),(Name="Param_2")),ExpressionGuids=(51B77E1447EB6BEB04CEFC91C8AFAA1F,E264A04C41CF51C42915B9BB46F99FD1,B5ADB2324064A035B0FCCF98DB82F262)),RuntimeEntries[2]=(NameHashes=(416367023444302502),ParameterInfos=((Name="SlateUI")),ExpressionGuids=(9A24037F48265F19AF827590D5946A6F)),ScalarValues=(0.000000),VectorValues=((R=1.000000,G=1.000000,B=1.000000,A=1.000000),(R=0.000000,G=0.620889,B=0.000000,A=1.000000),(R=0.931252,G=1.000000,B=1.000000,A=0.150000)),TextureValues=(Texture2D'"/Game/UI/resource/JianYingIcon/XiangZiFenLeiicon/xiangzifenlei_banchengpin.xiangzifenlei_banchengpin"'),ScalarMinMaxValues=((X=0.000000,Y=0.000000)),ScalarCurveValues=(None),ScalarCurveAtlasValues=(None),VectorChannelNameValues=((),(),()),VectorUsedAsChannelMaskValues=(False,False,False),TextureChannelNameValues=(())),ReferencedTextures=(Texture2D'"/Game/UI/resource/JianYingIcon/XiangZiFenLeiicon/xiangzifenlei_banchengpin.xiangzifenlei_banchengpin"'),QualityLevelsUsed=(False,False,False,False))
+   ReferencedTextureGuids(0)=709CD0CC447A538DB4E3FDA9D7DEB00F
+   TextureStreamingDataVersion=1
+   TextureStreamingData(0)=(SamplingScale=1.000000,UVChannelIndex=0,TextureName="xiangzifenlei_banchengpin",TextureReference=/Game/UI/resource/JianYingIcon/XiangZiFenLeiicon/xiangzifenlei_banchengpin.xiangzifenlei_banchengpin)
+   ThumbnailInfo=SceneThumbnailInfoWithPrimitive'"SceneThumbnailInfoWithPrimitive_0"'
+   LightingGuid=9C3EE3034B3B169ADA19C8A4D5AD7022
+End Object

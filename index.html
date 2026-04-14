@@ -559,15 +559,73 @@
         <div id="loading">파일 구조 분석 및 계층화 진행 중...</div>
 
         <script>
-            {
+            const INITIAL_RENDER_LIMIT = 200;
+            const LOAD_MORE_STEP = 200;
+            let currentRenderLimit = INITIAL_RENDER_LIMIT;
+            let rowRenderToken = 0;
+
+            function debounce(fn, wait = 0) {
+                let timer = null;
+                return (...args) => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => fn(...args), wait);
+                };
             }
 
-            async function fetchBytes(url) {
-                const res = await fetch(url, { cache: "no-cache" });
-                if (!res.ok) {
-                    throw new Error(`파일 로드 실패: ${url} (${res.status})`);
+            function getPageBaseUrl() {
+                const rawHref = window.location.href
+                    .split("#")[0]
+                    .split("?")[0];
+                const currentUrl = new URL(rawHref);
+                const hasFileName = /\/[^\/]+\.[a-z0-9]+$/i.test(
+                    currentUrl.pathname,
+                );
+                const normalizedHref =
+                    !rawHref.endsWith("/") && !hasFileName
+                        ? rawHref + "/"
+                        : rawHref;
+                return new URL(".", normalizedHref);
+            }
+
+            const PAGE_BASE_URL = getPageBaseUrl();
+
+            function resolveRepoUrl(path) {
+                const relativePath = String(path || "")
+                    .replace(/^\.\//, "")
+                    .replace(/^\/+/, "");
+                return new URL(relativePath, PAGE_BASE_URL).toString();
+            }
+
+            function stripDecodedText(text) {
+                return String(text ?? "")
+                    .replace(/^\uFEFF/, "")
+                    .replace(/[\u200B-\u200D\u2060]/g, "")
+                    .replace(/\u0000/g, "");
+            }
+
+            async function fetchBytes(url, retries = 1) {
+                let lastError = null;
+
+                for (let attempt = 0; attempt <= retries; attempt++) {
+                    try {
+                        const res = await fetch(url, { cache: "no-cache" });
+                        if (!res.ok) {
+                            throw new Error(
+                                `파일 로드 실패: ${url} (${res.status})`,
+                            );
+                        }
+                        return new Uint8Array(await res.arrayBuffer());
+                    } catch (error) {
+                        lastError = error;
+                        if (attempt < retries) {
+                            await new Promise((resolve) =>
+                                setTimeout(resolve, 300 * (attempt + 1)),
+                            );
+                        }
+                    }
                 }
-                return new Uint8Array(await res.arrayBuffer());
+
+                throw lastError;
             }
 
             function decodeBytesAuto(bytes) {
@@ -629,51 +687,47 @@
 
             async function fetchTextWithEncoding(url) {
                 const bytes = await fetchBytes(url);
-                let text = decodeBytesAuto(bytes);
-                text = text.replace(/^\uFEFF/, "").replace(/\u0000/g, "");
-                return text;
+                return stripDecodedText(decodeBytesAuto(bytes));
             }
 
             async function fetchJsonWithEncoding(url) {
                 const bytes = await fetchBytes(url);
-                let text = decodeBytesAuto(bytes);
-                text = text
-                    .replace(/^\uFEFF/, "")
-                    .replace(/[\u200B-\u200D\u2060]/g, "")
-                    .replace(/\u0000/g, "")
-                    .trim();
+                const text = stripDecodedText(decodeBytesAuto(bytes)).trim();
 
                 try {
                     return JSON.parse(text);
-                } catch (e1) {
-                    const cleaned = text.replace(/^﻿/, "").trim();
-                    try {
-                        return JSON.parse(cleaned);
-                    } catch (e2) {
-                        throw new Error(
-                            `JSON 파싱 실패: ${url}\n${e2.message}`,
-                        );
-                    }
+                } catch (error) {
+                    throw new Error(`JSON 파싱 실패: ${url}\n${error.message}`);
                 }
             }
 
             const REPO_CONFIG = {
-                KO_PO_URL: "./data/Game.po",
-                EN_PO_URL: "./data/Game_en.po",
-                MAPPING_JSON_URL: "./data/tianfuzongbiaoxin2.json",
-                RESOURCE_BASE: "./assets/Game/UI/resource/",
+                KO_PO_URL: "data/Game.po",
+                EN_PO_URL: "data/Game_en.po",
+                MAPPING_JSON_URL: "data/tianfuzongbiaoxin2.json",
+                RESOURCE_BASE: "assets/Game/UI/resource/",
             };
 
             async function fetchTextFile(url) {
-                const res = await fetch(url, { cache: "no-store" });
-                if (!res.ok) throw new Error(`텍스트 파일 로드 실패: ${url}`);
-                return await res.text();
+                const resolvedUrl = resolveRepoUrl(url);
+                try {
+                    return await fetchTextWithEncoding(resolvedUrl);
+                } catch (error) {
+                    throw new Error(
+                        `텍스트 파일 로드 실패: ${resolvedUrl}\n${error.message}`,
+                    );
+                }
             }
 
             async function fetchJsonFile(url) {
-                const res = await fetch(url, { cache: "no-store" });
-                if (!res.ok) throw new Error(`JSON 파일 로드 실패: ${url}`);
-                return await res.json();
+                const resolvedUrl = resolveRepoUrl(url);
+                try {
+                    return await fetchJsonWithEncoding(resolvedUrl);
+                } catch (error) {
+                    throw new Error(
+                        `JSON 파일 로드 실패: ${resolvedUrl}\n${error.message}`,
+                    );
+                }
             }
 
             function updateRepoStatus(message) {
@@ -688,47 +742,84 @@
             let resourceFileMap = new Map();
             let imageUrlCache = new Map();
 
-            // 💡 수정된 부분: 파서가 Dictionary 덮어쓰기를 하지 않고 모든 라인을 배열에 순차 저장합니다.
+            function parsePoTextValue(line) {
+                const quoteIndex = line.indexOf('"');
+                if (quoteIndex < 0) return "";
+
+                const quoted = line.slice(quoteIndex);
+                try {
+                    return JSON.parse(quoted);
+                } catch (error) {
+                    return quoted
+                        .slice(1, -1)
+                        .replace(/\\"/g, '"')
+                        .replace(/\\n/g, "\n")
+                        .replace(/\\r/g, "\r")
+                        .replace(/\\t/g, "\t")
+                        .replace(/\\\\/g, "\\");
+                }
+            }
+
+            function readPoMultilineValue(lines, startIndex) {
+                let value = parsePoTextValue(lines[startIndex].trim());
+                let nextIndex = startIndex + 1;
+
+                while (nextIndex < lines.length) {
+                    const nextLine = lines[nextIndex].trim();
+                    if (!nextLine.startsWith('"')) break;
+                    value += parsePoTextValue(nextLine);
+                    nextIndex += 1;
+                }
+
+                return { value, nextIndex: nextIndex - 1 };
+            }
+
             function parsePO(content) {
                 const records = [];
-                const lines = content.split("\n");
+                const lines = content.split(/\r?\n/);
                 let currentLoc = "Unknown";
                 let currentCtxt = null;
                 let currentId = null;
 
                 for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
+                    const line = lines[i].trim();
+                    if (!line) continue;
 
                     const locMatch = line.match(
                         /^(?:#:|#\.\s*SourceLocation:)\s*(.+)$/i,
                     );
                     if (locMatch) {
                         currentLoc = locMatch[1].trim();
-                    } else if (line.startsWith("msgctxt")) {
-                        const match = line.match(/^msgctxt\s+"(.*)"$/);
-                        if (match) currentCtxt = match[1];
-                    } else if (line.startsWith("msgid")) {
-                        const match = line.match(/^msgid\s+"(.*)"$/);
-                        if (match) currentId = match[1];
-                    } else if (
-                        line.startsWith("msgstr") &&
-                        currentId !== null
-                    ) {
-                        const match = line.match(/^msgstr\s+"(.*)"$/);
-                        if (match) {
-                            let strVal = match[1]
-                                .replace(/\\"/g, '"')
-                                .replace(/\\n/g, "\n");
+                        continue;
+                    }
+
+                    if (line.startsWith("msgctxt")) {
+                        const parsed = readPoMultilineValue(lines, i);
+                        currentCtxt = parsed.value;
+                        i = parsed.nextIndex;
+                        continue;
+                    }
+
+                    if (line.startsWith("msgid")) {
+                        const parsed = readPoMultilineValue(lines, i);
+                        currentId = parsed.value;
+                        i = parsed.nextIndex;
+                        continue;
+                    }
+
+                    if (line.startsWith("msgstr") && currentId !== null) {
+                        const parsed = readPoMultilineValue(lines, i);
+                        if (currentId || currentLoc !== "Unknown" || currentCtxt) {
                             records.push({
                                 loc: currentLoc,
                                 ctxt: currentCtxt,
                                 id: currentId,
-                                str: strVal,
+                                str: parsed.value,
                             });
                         }
-                        // 다음 텍스트 블록을 위해 ID와 컨텍스트 초기화
                         currentId = null;
                         currentCtxt = null;
+                        i = parsed.nextIndex;
                     }
                 }
                 return records;
@@ -991,6 +1082,15 @@
                 return canvas.toDataURL("image/png");
             }
 
+            function canLoadImageUrl(url) {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve(true);
+                    img.onerror = () => resolve(false);
+                    img.src = url;
+                });
+            }
+
             async function getImageUrlForPath(rawPath) {
                 if (!rawPath) return null;
                 if (imageUrlCache.has(rawPath))
@@ -1009,35 +1109,29 @@
                     ? [rel]
                     : [
                           rel + ".webp",
-                          rel + ".webp",
+                          rel + ".png",
                           rel + ".jpg",
                           rel + ".jpeg",
                           rel + ".bmp",
-                          rel + ".webp",
-                          rel + ".webp",
+                          rel + ".tga",
                       ];
 
                 for (const relPath of extCandidates) {
-                    const url = REPO_CONFIG.RESOURCE_BASE + relPath;
+                    const url = resolveRepoUrl(REPO_CONFIG.RESOURCE_BASE + relPath);
                     try {
-                        if (/\.webp$/i.test(relPath)) {
+                        if (/\.tga$/i.test(relPath)) {
                             const res = await fetch(url, { cache: "no-store" });
                             if (!res.ok) continue;
                             const buffer = await res.arrayBuffer();
                             const dataUrl = tgaToDataUrl(buffer);
                             imageUrlCache.set(rawPath, dataUrl);
                             return dataUrl;
-                        } else {
-                            const ok = await new Promise((resolve) => {
-                                const img = new Image();
-                                img.onload = () => resolve(true);
-                                img.onerror = () => resolve(false);
-                                img.src = url;
-                            });
-                            if (ok) {
-                                imageUrlCache.set(rawPath, url);
-                                return url;
-                            }
+                        }
+
+                        const ok = await canLoadImageUrl(url);
+                        if (ok) {
+                            imageUrlCache.set(rawPath, url);
+                            return url;
                         }
                     } catch (err) {
                         console.warn("아이콘 로드 실패:", url, err);
@@ -1142,8 +1236,7 @@
             }
 
             // JSON 매핑 파일 기반 아이콘 경로 맵
-            {
-            }
+            var externalIconMap = {};
 
             function normalizeGameAssetPath(picValue) {
                 if (!picValue) return "";
@@ -1460,7 +1553,7 @@
                             : {};
                     const status = document.getElementById("mappingStatus");
                     if (status)
-                        status.textContent = `매핑 데이터: 내장 ${Object.keys(externalIconMap).length}개`;
+                        status.textContent = `매핑 데이터: 내장 ${Object.keys(externalIconMap || {}).length}개`;
                     return;
                 }
 
@@ -1521,7 +1614,7 @@
 
                 const status = document.getElementById("mappingStatus");
                 if (status)
-                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
+                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap || {}).length}개`;
             }
 
             function applyMappingObject(arr) {
@@ -1545,7 +1638,7 @@
                 externalIconMap = nextMap;
                 const status = document.getElementById("mappingStatus");
                 if (status)
-                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap).length}개`;
+                    status.textContent = `매핑 데이터 로드됨: ${Object.keys(externalIconMap || {}).length}개`;
             }
 
             function applyGiftJsonDetails(arr) {
@@ -1700,7 +1793,7 @@
                             document.getElementById("allCatBtn"),
                         );
                         updateRepoStatus(
-                            `로드 완료: PO ${koRecords.length}개, 영문 ${enRecordsArray.length}개, 매핑 ${Object.keys(externalIconMap).length}개`,
+                            `로드 완료: PO ${koRecords.length}개, 영문 ${enRecordsArray.length}개, 매핑 ${Object.keys(externalIconMap || {}).length}개`,
                         );
                     } catch (e) {
                         console.error(e);

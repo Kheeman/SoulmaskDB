@@ -559,6 +559,9 @@
         <div id="loading">파일 구조 분석 및 계층화 진행 중...</div>
 
         <script>
+            {
+            }
+
             async function fetchBytes(url) {
                 const res = await fetch(url, { cache: "no-cache" });
                 if (!res.ok) {
@@ -1139,7 +1142,8 @@
             }
 
             // JSON 매핑 파일 기반 아이콘 경로 맵
-            let externalIconMap = {};
+            {
+            }
 
             function normalizeGameAssetPath(picValue) {
                 if (!picValue) return "";
@@ -1158,6 +1162,10 @@
             }
 
             function getMappedIconPath(item) {
+                const safeMap =
+                    typeof externalIconMap !== "undefined" && externalIconMap
+                        ? externalIconMap
+                        : {};
                 const keyCandidates = [
                     String(item.shortId || "").trim(),
                     String(item.msgidBase || "").trim(),
@@ -1166,8 +1174,8 @@
                 ].filter(Boolean);
 
                 for (const key of keyCandidates) {
-                    if (externalIconMap[key])
-                        return normalizeGameAssetPath(externalIconMap[key]);
+                    if (safeMap[key])
+                        return normalizeGameAssetPath(safeMap[key]);
                 }
                 return "";
             }
@@ -1445,7 +1453,11 @@
 
             async function loadMappingFile(file) {
                 if (!file) {
-                    externalIconMap = externalIconMap || {};
+                    externalIconMap =
+                        typeof externalIconMap !== "undefined" &&
+                        externalIconMap
+                            ? externalIconMap
+                            : {};
                     const status = document.getElementById("mappingStatus");
                     if (status)
                         status.textContent = `매핑 데이터: 내장 ${Object.keys(externalIconMap).length}개`;

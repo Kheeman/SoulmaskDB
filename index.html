@@ -392,6 +392,29 @@
                 font-weight: 700;
                 margin-right: 6px;
             }
+
+            .load-more-wrap {
+                padding: 16px 20px;
+                text-align: center;
+                background: #151515;
+                border-top: 1px solid var(--border);
+            }
+            .load-more-btn {
+                padding: 10px 18px;
+                background: var(--primary);
+                color: #000;
+                border: none;
+                border-radius: 8px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .load-more-btn:hover {
+                background: #00b8e6;
+            }
+            .load-more-btn:disabled {
+                opacity: 0.5;
+                cursor: default;
+            }
         </style>
     </head>
     <body>
@@ -521,6 +544,15 @@
                         </tr>
                     </tbody>
                 </table>
+                <div
+                    class="load-more-wrap"
+                    id="loadMoreWrap"
+                    style="display: none"
+                >
+                    <button class="load-more-btn" id="loadMoreBtn">
+                        더 보기
+                    </button>
+                </div>
             </div>
         </main>
 
@@ -849,8 +881,8 @@
                         if (mapKey.startsWith(key + ".")) return file;
                         if (
                             mapKey.endsWith("/" + key) ||
-                            mapKey.endsWith("/" + key + ".tga") ||
-                            mapKey.endsWith("/" + key + ".png")
+                            mapKey.endsWith("/" + key + ".webp") ||
+                            mapKey.endsWith("/" + key + ".webp")
                         )
                             return file;
                     }
@@ -973,19 +1005,19 @@
                 const extCandidates = /\.[a-z0-9]+$/i.test(rel)
                     ? [rel]
                     : [
-                          rel + ".png",
+                          rel + ".webp",
                           rel + ".webp",
                           rel + ".jpg",
                           rel + ".jpeg",
                           rel + ".bmp",
-                          rel + ".tga",
-                          rel + ".TGA",
+                          rel + ".webp",
+                          rel + ".webp",
                       ];
 
                 for (const relPath of extCandidates) {
                     const url = REPO_CONFIG.RESOURCE_BASE + relPath;
                     try {
-                        if (/\.tga$/i.test(relPath)) {
+                        if (/\.webp$/i.test(relPath)) {
                             const res = await fetch(url, { cache: "no-store" });
                             if (!res.ok) continue;
                             const buffer = await res.arrayBuffer();
@@ -1012,6 +1044,68 @@
                 imageUrlCache.set(rawPath, null);
                 return null;
             }
+
+            async function getCachedImageUrlForPath(rawPath) {
+                if (!rawPath) return null;
+                if (imageUrlCache.has(rawPath))
+                    return imageUrlCache.get(rawPath);
+
+                const url = await getImageUrlForPath(rawPath);
+                imageUrlCache.set(rawPath, url);
+                return url;
+            }
+
+            function escapeAttr(value) {
+                return String(value ?? "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+
+            function getDeferredIconCell(item) {
+                const candidates = getIconCandidates(item);
+                const rawPath =
+                    candidates.find(Boolean) || extractIconPath(item);
+
+                if (!rawPath) {
+                    return `<td class="icon-cell"><div class="icon-box"><div class="icon-empty">아이콘<br>없음</div></div><div class="icon-path">매핑 또는 원본 경로 없음</div></td>`;
+                }
+
+                const bestPath = candidates.length ? candidates[0] : rawPath;
+                return `<td class="icon-cell">
+        <div class="icon-box icon-lazy" data-icon-path="${escapeAttr(bestPath)}">
+            <div class="icon-empty">로딩<br>대기</div>
+        </div>
+        <div class="icon-path">${escapeHtml(bestPath)}</div>
+    </td>`;
+            }
+
+            async function hydrateVisibleIcons(root = document) {
+                const targets = Array.from(
+                    root.querySelectorAll(".icon-lazy[data-icon-path]"),
+                );
+                const visibleTargets = targets.slice(0, 60);
+
+                for (const box of visibleTargets) {
+                    if (box.dataset.loaded === "1") continue;
+                    const rawPath = box.dataset.iconPath;
+                    const url = await getCachedImageUrlForPath(rawPath);
+                    box.dataset.loaded = "1";
+
+                    if (!url) {
+                        box.innerHTML =
+                            '<div class="icon-empty">파일<br>미매칭</div>';
+                    } else {
+                        box.innerHTML = `<img src="${url}" alt="icon" loading="lazy" decoding="async">`;
+                    }
+                }
+            }
+
+            const scheduleHydrateVisibleIcons = debounce(
+                () => hydrateVisibleIcons(document),
+                80,
+            );
 
             async function renderIconCell(item) {
                 const candidates = getIconCandidates(item);
@@ -1341,7 +1435,10 @@
                     const el = document.getElementById(id);
                     if (el && !el.dataset.bound) {
                         el.dataset.bound = "1";
-                        el.addEventListener("change", () => renderTable());
+                        el.addEventListener("change", () => {
+                            currentRenderLimit = INITIAL_RENDER_LIMIT;
+                            renderTable();
+                        });
                     }
                 });
             }
@@ -1700,6 +1797,7 @@
             }
 
             function selectFilter(filterType, filterValue, element) {
+                currentRenderLimit = INITIAL_RENDER_LIMIT;
                 currentFilterType = filterType;
                 currentFilterValue = filterValue;
 
@@ -1745,6 +1843,9 @@
                     .value.toLowerCase();
                 const tbody = document.getElementById("tableBody");
                 const status = document.getElementById("statusText");
+                const loadMoreWrap = document.getElementById("loadMoreWrap");
+                const loadMoreBtn = document.getElementById("loadMoreBtn");
+                const myToken = ++rowRenderToken;
 
                 let filtered = globalData
                     .filter((item) => {
@@ -1787,17 +1888,37 @@
                 status.innerText = `총 ${filtered.length} 세트`;
                 updateGiftSummary(filtered);
 
+                const visible = filtered.slice(0, currentRenderLimit);
                 let html = "";
-                const limit = Math.min(filtered.length, 1000);
 
-                for (let i = 0; i < limit; i++) {
-                    const item = filtered[i];
-                    const iconCellHtml = await renderIconCell(item);
+                for (let i = 0; i < visible.length; i++) {
+                    if (myToken !== rowRenderToken) return;
+                    const item = visible[i];
+                    const meta = item.giftMeta || {};
+                    const metaChips = [];
+                    if (meta.star)
+                        metaChips.push(
+                            `<span class="chip active">${escapeHtml(String(meta.star))}성</span>`,
+                        );
+                    if (meta.effect)
+                        metaChips.push(
+                            `<span class="chip">${escapeHtml(meta.effect)}</span>`,
+                        );
+                    if (meta.attrType && meta.attrType !== "None")
+                        metaChips.push(
+                            `<span class="chip">${escapeHtml(meta.attrType)}</span>`,
+                        );
+                    if (meta.source)
+                        metaChips.push(
+                            `<span class="chip">${escapeHtml(getGiftSourceLabel(meta.source))}</span>`,
+                        );
 
+                    const iconCellHtml = getDeferredIconCell(item);
                     html += `<tr>${iconCellHtml}
             <td>
                 <div class="dt-name">${item.dtName}</div>
                 <div class="key-id">ID: ${item.shortId}</div>
+                ${meta.name ? `<div class="key-id">Name: ${escapeHtml(meta.name)}</div>` : ""}
             </td>`;
 
                     if (item.isGrouped) {
@@ -1805,10 +1926,12 @@
             <td>
                 <div class="str-ko">${item.nameKo || '<span style="color:#555">(이름 없음)</span>'}</div>
                 <div class="str-en">${item.nameEn}</div>
+                ${metaChips.length ? `<div class="chip-row">${metaChips.join("")}</div>` : ""}
             </td>
             <td>
                 <div class="str-ko">${item.descKo || '<span style="color:#555">(설명 없음)</span>'}</div>
                 <div class="str-en">${item.descEn}</div>
+                ${meta.fuzzy ? `<div class="key-id" style="margin-top:8px;">요약: ${escapeHtml(meta.fuzzy)}</div>` : ""}
             </td>`;
                     } else {
                         html += `
@@ -1816,29 +1939,55 @@
                 <div class="single-item">
                     <div class="str-ko">${item.singleKo}</div>
                     <div class="str-en">${item.singleEn}</div>
+                    ${metaChips.length ? `<div class="chip-row">${metaChips.join("")}</div>` : ""}
+                    ${meta.fuzzy ? `<div class="key-id" style="margin-top:8px;">요약: ${escapeHtml(meta.fuzzy)}</div>` : ""}
                 </div>
             </td>`;
                     }
                     html += `</tr>`;
                 }
 
-                if (filtered.length > 1000) {
-                    html += `<tr><td colspan="4" style="text-align:center; color:#f39c12; padding:20px;">결과가 너무 많습니다 (상위 1000개 제한). 검색어를 입력해주세요.</td></tr>`;
-                } else if (filtered.length === 0) {
-                    html += `<tr><td colspan="4" style="text-align:center; padding: 30px; color: #777;">검색 결과가 없습니다.</td></tr>`;
+                if (filtered.length === 0) {
+                    html = `<tr><td colspan="4" style="text-align:center; padding: 30px; color: #777;">검색 결과가 없습니다.</td></tr>`;
+                    loadMoreWrap.style.display = "none";
+                } else if (filtered.length > currentRenderLimit) {
+                    loadMoreWrap.style.display = "";
+                    loadMoreBtn.disabled = false;
+                    loadMoreBtn.textContent = `더 보기 (${visible.length}/${filtered.length})`;
+                } else {
+                    loadMoreWrap.style.display = "none";
                 }
 
                 tbody.innerHTML = html;
+                scheduleHydrateVisibleIcons();
+
+                if (loadMoreBtn && !loadMoreBtn.dataset.bound) {
+                    loadMoreBtn.dataset.bound = "1";
+                    loadMoreBtn.addEventListener("click", () => {
+                        currentRenderLimit += LOAD_MORE_STEP;
+                        renderTable();
+                    });
+                }
             }
 
             let timeout = null;
             document.getElementById("search").addEventListener("input", () => {
                 clearTimeout(timeout);
-                timeout = setTimeout(() => renderTable(), 300);
+                currentRenderLimit = INITIAL_RENDER_LIMIT;
+                timeout = setTimeout(() => renderTable(), 180);
             });
 
             window.addEventListener("DOMContentLoaded", () => {
                 processFiles();
+            });
+
+            document
+                .querySelector(".content")
+                ?.addEventListener("scroll", scheduleHydrateVisibleIcons, {
+                    passive: true,
+                });
+            window.addEventListener("scroll", scheduleHydrateVisibleIcons, {
+                passive: true,
             });
         </script>
     </body>

@@ -165,6 +165,7 @@
                 display: flex;
                 gap: 10px;
                 align-items: center;
+                flex-wrap: wrap;
             }
             .search-bar {
                 flex: 1;
@@ -180,6 +181,35 @@
                 color: #aaa;
                 min-width: 150px;
                 text-align: right;
+            }
+            .language-selector {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+                padding: 9px 12px;
+                background: #1d1d1d;
+                border: 1px solid #343434;
+                border-radius: 8px;
+            }
+            .language-label {
+                font-size: 0.85rem;
+                color: #9aa7ad;
+                font-weight: 700;
+            }
+            .language-option {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                color: #ddd;
+                font-size: 0.9rem;
+                cursor: pointer;
+                user-select: none;
+            }
+            .language-option input {
+                margin: 0;
+                accent-color: var(--primary);
+                cursor: pointer;
             }
 
             /* 테이블 */
@@ -474,6 +504,26 @@
                     class="search-bar"
                     placeholder="이름, 설명, 또는 ID로 검색 (예: 220033, 160681)"
                 />
+                <div class="language-selector" id="languageSelector">
+                    <span class="language-label">출력 언어</span>
+                    <label class="language-option">
+                        <input
+                            type="checkbox"
+                            name="displayLanguage"
+                            value="ko"
+                            checked
+                        />
+                        한국어
+                    </label>
+                    <label class="language-option">
+                        <input type="checkbox" name="displayLanguage" value="en" />
+                        English
+                    </label>
+                    <label class="language-option">
+                        <input type="checkbox" name="displayLanguage" value="jp" />
+                        日本語
+                    </label>
+                </div>
                 <div class="status" id="statusText">대기 중</div>
             </header>
             <div class="gift-toolbar" id="giftToolbar">
@@ -704,6 +754,7 @@
             const REPO_CONFIG = {
                 KO_PO_URL: "data/Game.po",
                 EN_PO_URL: "data/Game_en.po",
+                JP_PO_URL: "data/Game_jp.po",
                 MAPPING_JSON_URL: "data/tianfuzongbiaoxin2.json",
                 RESOURCE_BASE: "assets/Game/UI/resource/",
             };
@@ -738,9 +789,59 @@
             let globalData = [];
             let currentFilterType = "ALL";
             let currentFilterValue = "";
+            let currentDisplayLanguage = "ko";
             let resourceFiles = [];
             let resourceFileMap = new Map();
             let imageUrlCache = new Map();
+            const LANGUAGE_FIELD_SUFFIX = {
+                ko: "Ko",
+                en: "En",
+                jp: "Jp",
+            };
+
+            function getLocalizedItemText(item, fieldBase) {
+                const suffix =
+                    LANGUAGE_FIELD_SUFFIX[currentDisplayLanguage] ||
+                    LANGUAGE_FIELD_SUFFIX.ko;
+                const primary = String(item[`${fieldBase}${suffix}`] || "");
+                if (primary.trim()) return primary;
+
+                if (currentDisplayLanguage !== "en") {
+                    const fallback = String(item[`${fieldBase}En`] || "");
+                    if (fallback.trim()) return fallback;
+                }
+
+                return "";
+            }
+
+            function setDisplayLanguage(language) {
+                if (!LANGUAGE_FIELD_SUFFIX[language]) language = "ko";
+                currentDisplayLanguage = language;
+
+                document
+                    .querySelectorAll('input[name="displayLanguage"]')
+                    .forEach((input) => {
+                        input.checked = input.value === language;
+                    });
+            }
+
+            function bindLanguageSelectorEvents() {
+                document
+                    .querySelectorAll('input[name="displayLanguage"]')
+                    .forEach((input) => {
+                        if (input.dataset.bound) return;
+                        input.dataset.bound = "1";
+                        input.addEventListener("change", () => {
+                            if (!input.checked) {
+                                input.checked = true;
+                                return;
+                            }
+                            currentRenderLimit = INITIAL_RENDER_LIMIT;
+                            setDisplayLanguage(input.value);
+                            renderTable();
+                        });
+                    });
+            }
 
             function parsePoTextValue(line) {
                 const quoteIndex = line.indexOf('"');
@@ -1675,10 +1776,14 @@
                     try {
                         imageUrlCache.clear();
 
-                        const [koText, enText, mappingJson] = await Promise.all(
+                        const [koText, enText, jpText, mappingJson] =
+                            await Promise.all(
                             [
                                 fetchTextFile(REPO_CONFIG.KO_PO_URL),
                                 fetchTextFile(REPO_CONFIG.EN_PO_URL).catch(
+                                    () => "",
+                                ),
+                                fetchTextFile(REPO_CONFIG.JP_PO_URL).catch(
                                     () => "",
                                 ),
                                 fetchJsonFile(REPO_CONFIG.MAPPING_JSON_URL),
@@ -1690,11 +1795,18 @@
 
                         const koRecords = parsePO(koText);
                         const enRecordsArray = enText ? parsePO(enText) : [];
+                        const jpRecordsArray = jpText ? parsePO(jpText) : [];
 
                         const enRecordsMap = {};
                         for (const en of enRecordsArray) {
                             const key = en.ctxt || en.id;
                             enRecordsMap[key] = en.str;
+                        }
+
+                        const jpRecordsMap = {};
+                        for (const jp of jpRecordsArray) {
+                            const key = jp.ctxt || jp.id;
+                            jpRecordsMap[key] = jp.str;
                         }
 
                         const groups = {};
@@ -1707,6 +1819,7 @@
 
                             const lookupKey = ctxt || msgid;
                             const strEn = enRecordsMap[lookupKey] || "";
+                            const strJp = jpRecordsMap[lookupKey] || "";
 
                             let mainCategory = "기타 (Etc)";
                             let dataTable = "Unknown";
@@ -1761,10 +1874,13 @@
                                     dtName: dataTable,
                                     nameKo: "",
                                     nameEn: "",
+                                    nameJp: "",
                                     descKo: "",
                                     descEn: "",
+                                    descJp: "",
                                     singleKo: "",
                                     singleEn: "",
+                                    singleJp: "",
                                     isGrouped: false,
                                 };
                             }
@@ -1772,14 +1888,17 @@
                             if (type === "name" || type === "title") {
                                 groups[baseKey].nameKo = strKo;
                                 groups[baseKey].nameEn = strEn;
+                                groups[baseKey].nameJp = strJp;
                                 groups[baseKey].isGrouped = true;
                             } else if (type === "desc") {
                                 groups[baseKey].descKo = strKo;
                                 groups[baseKey].descEn = strEn;
+                                groups[baseKey].descJp = strJp;
                                 groups[baseKey].isGrouped = true;
                             } else {
                                 groups[baseKey].singleKo = strKo;
                                 groups[baseKey].singleEn = strEn;
+                                groups[baseKey].singleJp = strJp;
                             }
                         }
 
@@ -1945,7 +2064,8 @@
             async function renderTable() {
                 const term = document
                     .getElementById("search")
-                    .value.toLowerCase();
+                    .value.trim()
+                    .toLowerCase();
                 const tbody = document.getElementById("tableBody");
                 const status = document.getElementById("statusText");
                 const loadMoreWrap = document.getElementById("loadMoreWrap");
@@ -1968,8 +2088,14 @@
                         if (!term) return true;
                         return (
                             item.nameKo.toLowerCase().includes(term) ||
+                            item.nameEn.toLowerCase().includes(term) ||
+                            item.nameJp.toLowerCase().includes(term) ||
                             item.descKo.toLowerCase().includes(term) ||
+                            item.descEn.toLowerCase().includes(term) ||
+                            item.descJp.toLowerCase().includes(term) ||
                             item.singleKo.toLowerCase().includes(term) ||
+                            item.singleEn.toLowerCase().includes(term) ||
+                            item.singleJp.toLowerCase().includes(term) ||
                             item.shortId.toLowerCase().includes(term) ||
                             item.msgidBase.toLowerCase().includes(term)
                         );
@@ -2000,6 +2126,15 @@
                     if (myToken !== rowRenderToken) return;
                     const item = visible[i];
                     const meta = item.giftMeta || {};
+                    const displayName =
+                        getLocalizedItemText(item, "name") ||
+                        '<span style="color:#555">(이름 없음)</span>';
+                    const displayDesc =
+                        getLocalizedItemText(item, "desc") ||
+                        '<span style="color:#555">(설명 없음)</span>';
+                    const displaySingle =
+                        getLocalizedItemText(item, "single") ||
+                        '<span style="color:#555">(내용 없음)</span>';
                     const metaChips = [];
                     if (meta.star)
                         metaChips.push(
@@ -2029,21 +2164,18 @@
                     if (item.isGrouped) {
                         html += `
             <td>
-                <div class="str-ko">${item.nameKo || '<span style="color:#555">(이름 없음)</span>'}</div>
-                <div class="str-en">${item.nameEn}</div>
+                <div class="str-ko">${displayName}</div>
                 ${metaChips.length ? `<div class="chip-row">${metaChips.join("")}</div>` : ""}
             </td>
             <td>
-                <div class="str-ko">${item.descKo || '<span style="color:#555">(설명 없음)</span>'}</div>
-                <div class="str-en">${item.descEn}</div>
+                <div class="str-ko">${displayDesc}</div>
                 ${meta.fuzzy ? `<div class="key-id" style="margin-top:8px;">요약: ${escapeHtml(meta.fuzzy)}</div>` : ""}
             </td>`;
                     } else {
                         html += `
             <td colspan="2">
                 <div class="single-item">
-                    <div class="str-ko">${item.singleKo}</div>
-                    <div class="str-en">${item.singleEn}</div>
+                    <div class="str-ko">${displaySingle}</div>
                     ${metaChips.length ? `<div class="chip-row">${metaChips.join("")}</div>` : ""}
                     ${meta.fuzzy ? `<div class="key-id" style="margin-top:8px;">요약: ${escapeHtml(meta.fuzzy)}</div>` : ""}
                 </div>
@@ -2083,6 +2215,8 @@
             });
 
             window.addEventListener("DOMContentLoaded", () => {
+                bindLanguageSelectorEvents();
+                setDisplayLanguage(currentDisplayLanguage);
                 processFiles();
             });
 

@@ -799,17 +799,39 @@
                 jp: "Jp",
             };
 
+            function hasHangulText(text) {
+                return /[\uac00-\ud7a3]/.test(String(text || ""));
+            }
+
+            function hasHanText(text) {
+                return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(
+                    String(text || ""),
+                );
+            }
+
+            function isChineseOnlyText(text) {
+                const value = String(text || "").trim();
+                return Boolean(value) && !hasHangulText(value) && hasHanText(value);
+            }
+
             function getLocalizedItemText(item, fieldBase) {
                 const suffix =
                     LANGUAGE_FIELD_SUFFIX[currentDisplayLanguage] ||
                     LANGUAGE_FIELD_SUFFIX.ko;
                 const primary = String(item[`${fieldBase}${suffix}`] || "");
-                if (primary.trim()) return primary;
+                const fallback = String(item[`${fieldBase}En`] || "");
+                const prefersEnglishFallback =
+                    currentDisplayLanguage === "ko" && isChineseOnlyText(primary);
+                if (primary.trim() && !prefersEnglishFallback) return primary;
 
                 if (currentDisplayLanguage !== "en") {
-                    const fallback = String(item[`${fieldBase}En`] || "");
-                    if (fallback.trim()) return fallback;
+                    if (fallback.trim() && !isChineseOnlyText(fallback))
+                        return fallback;
                 }
+
+                if (primary.trim()) return primary;
+                if (currentDisplayLanguage !== "en" && fallback.trim())
+                    return fallback;
 
                 return "";
             }

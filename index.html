@@ -1492,6 +1492,8 @@
                         effect: String(obj?.NGEffect ?? "").trim(),
                         source: String(obj?.NGEffectSource ?? "").trim(),
                         attrType: String(obj?.NGEffectAttrType ?? "").trim(),
+                        learnedId: String(obj?.LearnedNGID ?? "").trim(),
+                        upgradeId: String(obj?.UpgradeNGID ?? "").trim(),
                         pic: String(obj?.Pic ?? "").trim(),
                         title: parseNsLocTextValue(obj?.Title ?? ""),
                         desc: parseNsLocTextValue(obj?.Desc ?? ""),
@@ -1616,12 +1618,27 @@
 
             function getGiftVariantGroupKey(item) {
                 const meta = item.giftMeta || {};
+                const learnedId = String(meta.learnedId || "").trim();
+                if (learnedId && learnedId !== "0") return `L:${learnedId}`;
+                return [
+                    "B",
+                    normalizeGiftVariantText(getGiftVariantTitle(item)),
+                    String(meta.effect || "").trim(),
+                    String(meta.source || "").trim(),
+                    String(meta.attrType || "").trim(),
+                    String(meta.pic || item.pic || "").trim(),
+                ].join("||");
+            }
+
+            function getGiftVariantSplitKey(item) {
+                const meta = item.giftMeta || {};
                 return [
                     normalizeGiftVariantText(getGiftVariantTitle(item)),
                     String(meta.effect || "").trim(),
                     String(meta.source || "").trim(),
                     String(meta.attrType || "").trim(),
                     normalizeGiftVariantText(getGiftVariantBody(item)),
+                    String(meta.pic || item.pic || "").trim(),
                 ].join("||");
             }
 
@@ -1644,7 +1661,41 @@
                     grouped.get(groupKey).push(item);
                 }
 
-                return Array.from(grouped.entries()).map(
+                const normalizedGroups = [];
+                for (const [groupKey, variants] of grouped.entries()) {
+                    const seenStars = new Set();
+                    let hasDuplicateStar = false;
+                    for (const variant of variants) {
+                        const star = String(variant?.giftMeta?.star ?? "").trim();
+                        if (seenStars.has(star)) {
+                            hasDuplicateStar = true;
+                            break;
+                        }
+                        seenStars.add(star);
+                    }
+
+                    if (!hasDuplicateStar) {
+                        normalizedGroups.push([groupKey, variants]);
+                        continue;
+                    }
+
+                    const splitGroups = new Map();
+                    for (const variant of variants) {
+                        const splitKey = getGiftVariantSplitKey(variant);
+                        if (!splitGroups.has(splitKey))
+                            splitGroups.set(splitKey, []);
+                        splitGroups.get(splitKey).push(variant);
+                    }
+
+                    for (const [splitKey, splitVariants] of splitGroups.entries()) {
+                        normalizedGroups.push([
+                            `${groupKey}::${splitKey}`,
+                            splitVariants,
+                        ]);
+                    }
+                }
+
+                return normalizedGroups.map(
                     ([groupKey, variants]) => {
                         const sortedVariants = variants.slice().sort((a, b) => {
                             const starDiff =
@@ -1951,6 +2002,8 @@
                         effect: String(obj?.NGEffect ?? "").trim(),
                         source: String(obj?.NGEffectSource ?? "").trim(),
                         attrType: String(obj?.NGEffectAttrType ?? "").trim(),
+                        learnedId: String(obj?.LearnedNGID ?? "").trim(),
+                        upgradeId: String(obj?.UpgradeNGID ?? "").trim(),
                         pic: String(obj?.Pic ?? "").trim(),
                         title: parseNsLocTextValue(obj?.Title ?? ""),
                         desc: parseNsLocTextValue(obj?.Desc ?? ""),

@@ -417,6 +417,11 @@
                 color: #8fe9ff;
                 border-color: #1e6d85;
             }
+            button.gift-star-chip {
+                cursor: pointer;
+                font: inherit;
+                line-height: 1.2;
+            }
             .section-title {
                 color: #f39c12;
                 font-weight: 700;
@@ -1410,9 +1415,22 @@
                 return giftSourceLabelMap[value] || value || "";
             }
 
+            const giftEffectLabelMap = {
+                AlertGrowthSpeed: "경계도 증가 속도",
+                AllSound: "모든 소리",
+                AttrInc: "속성 증가",
+                ChangTaiXiaoGuo: "상시 효과",
+                FootstepSound: "발소리",
+            };
+
+            function getGiftEffectLabel(value) {
+                return giftEffectLabelMap[value] || value || "";
+            }
+
             let giftMappingData = [];
             let giftMapById = {};
             let giftUIEnabled = true;
+            let giftVariantSelectionByGroup = Object.create(null);
 
             function parseNsLocTextValue(s) {
                 if (!s) return "";
@@ -1460,6 +1478,7 @@
             async function loadGiftJsonDetails(file) {
                 giftMappingData = [];
                 giftMapById = {};
+                giftVariantSelectionByGroup = Object.create(null);
                 if (!file) {
                     refreshGiftFilterOptions();
                     return;
@@ -1527,7 +1546,7 @@
                     effects
                         .map(
                             (v) =>
-                                `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`,
+                                `<option value="${escapeHtml(v)}">${escapeHtml(getGiftEffectLabel(v))}</option>`,
                         )
                         .join("");
                 sourceSel.innerHTML =
@@ -1557,6 +1576,145 @@
                     nameKo: item.nameKo || meta.title || item.nameKo,
                     descKo: item.descKo || meta.desc || item.descKo,
                 };
+            }
+
+            function normalizeGiftVariantText(text) {
+                return String(text || "")
+                    .replace(/\d+(?:\.\d+)?%?/g, "#")
+                    .replace(/\s+/g, " ")
+                    .trim();
+            }
+
+            function getGiftVariantTitle(item) {
+                const meta = item.giftMeta || {};
+                return String(
+                    meta.title ||
+                        item.nameKo ||
+                        item.nameEn ||
+                        item.nameJp ||
+                        item.singleKo ||
+                        item.singleEn ||
+                        item.singleJp ||
+                        item.shortId ||
+                        "",
+                ).trim();
+            }
+
+            function getGiftVariantBody(item) {
+                const meta = item.giftMeta || {};
+                return String(
+                    meta.desc ||
+                        item.descKo ||
+                        item.descEn ||
+                        item.descJp ||
+                        item.singleKo ||
+                        item.singleEn ||
+                        item.singleJp ||
+                        "",
+                ).trim();
+            }
+
+            function getGiftVariantGroupKey(item) {
+                const meta = item.giftMeta || {};
+                return [
+                    normalizeGiftVariantText(getGiftVariantTitle(item)),
+                    String(meta.effect || "").trim(),
+                    String(meta.source || "").trim(),
+                    String(meta.attrType || "").trim(),
+                    normalizeGiftVariantText(getGiftVariantBody(item)),
+                ].join("||");
+            }
+
+            function getDefaultGiftVariantStar(variants) {
+                const stars = variants
+                    .map((variant) =>
+                        String(variant?.giftMeta?.star ?? "").trim(),
+                    )
+                    .filter(Boolean)
+                    .sort((a, b) => Number(a) - Number(b));
+                if (stars.includes("3")) return "3";
+                return stars[stars.length - 1] || "";
+            }
+
+            function groupGiftVariants(items) {
+                const grouped = new Map();
+                for (const item of items) {
+                    const groupKey = getGiftVariantGroupKey(item);
+                    if (!grouped.has(groupKey)) grouped.set(groupKey, []);
+                    grouped.get(groupKey).push(item);
+                }
+
+                return Array.from(grouped.entries()).map(
+                    ([groupKey, variants]) => {
+                        const sortedVariants = variants.slice().sort((a, b) => {
+                            const starDiff =
+                                Number(a?.giftMeta?.star || 0) -
+                                Number(b?.giftMeta?.star || 0);
+                            if (starDiff !== 0) return starDiff;
+                            return String(a.shortId || "").localeCompare(
+                                String(b.shortId || ""),
+                            );
+                        });
+                        const savedStar =
+                            giftVariantSelectionByGroup[groupKey] || "";
+                        const selectedStar = sortedVariants.some(
+                            (variant) =>
+                                String(variant?.giftMeta?.star ?? "").trim() ===
+                                savedStar,
+                        )
+                            ? savedStar
+                            : getDefaultGiftVariantStar(sortedVariants);
+                        const selectedVariant =
+                            sortedVariants.find(
+                                (variant) =>
+                                    String(
+                                        variant?.giftMeta?.star ?? "",
+                                    ).trim() === selectedStar,
+                            ) || sortedVariants[sortedVariants.length - 1];
+
+                        return {
+                            ...selectedVariant,
+                            giftGroupKey: groupKey,
+                            giftSelectedStar: selectedStar,
+                            giftVariants: sortedVariants,
+                        };
+                    },
+                );
+            }
+
+            function getGiftSummaryItems(items) {
+                const summaryItems = [];
+                for (const item of items) {
+                    if (Array.isArray(item.giftVariants) && item.giftVariants.length) {
+                        summaryItems.push(...item.giftVariants);
+                    } else {
+                        summaryItems.push(item);
+                    }
+                }
+                return summaryItems;
+            }
+
+            function renderGiftStarChips(item, meta) {
+                if (!meta.star) return "";
+                const variants =
+                    Array.isArray(item.giftVariants) && item.giftVariants.length
+                        ? item.giftVariants
+                        : [item];
+                if (variants.length <= 1) {
+                    return `<span class="chip active">${escapeHtml(String(meta.star))}성</span>`;
+                }
+
+                return variants
+                    .map((variant) => {
+                        const star = String(variant?.giftMeta?.star ?? "").trim();
+                        if (!star) return "";
+                        const activeClass =
+                            star === String(item.giftSelectedStar || "").trim()
+                                ? " active"
+                                : "";
+                        return `<button type="button" class="chip gift-star-chip${activeClass}" data-gift-group-key="${escapeHtml(item.giftGroupKey || "")}" data-gift-star="${escapeHtml(star)}">${escapeHtml(star)}성</button>`;
+                    })
+                    .join("");
             }
 
             function getGiftFilteredData(base) {
@@ -1595,7 +1753,7 @@
                           : "DT_GiftZongBiao";
                 const starMap = {};
                 const effMap = {};
-                for (const item of items) {
+                for (const item of getGiftSummaryItems(items)) {
                     const meta = item.giftMeta || {};
                     if (meta.star)
                         starMap[meta.star] = (starMap[meta.star] || 0) + 1;
@@ -1612,7 +1770,7 @@
                     ? Object.entries(effMap)
                           .sort((a, b) => b[1] - a[1])
                           .slice(0, 3)
-                          .map(([k, v]) => `${k} ${v}`)
+                          .map(([k, v]) => `${getGiftEffectLabel(k)} ${v}`)
                           .join(" / ")
                     : "-";
             }
@@ -1664,6 +1822,23 @@
                             renderTable();
                         });
                     }
+                });
+            }
+
+            function bindGiftVariantSelectorEvents() {
+                const tbody = document.getElementById("tableBody");
+                if (!tbody || tbody.dataset.giftVariantBound) return;
+                tbody.dataset.giftVariantBound = "1";
+                tbody.addEventListener("click", (event) => {
+                    const button = event.target.closest(
+                        "button[data-gift-group-key][data-gift-star]",
+                    );
+                    if (!button) return;
+                    const groupKey = String(button.dataset.giftGroupKey || "");
+                    const star = String(button.dataset.giftStar || "");
+                    if (!groupKey || !star) return;
+                    giftVariantSelectionByGroup[groupKey] = star;
+                    renderTable();
                 });
             }
 
@@ -1767,6 +1942,7 @@
             function applyGiftJsonDetails(arr) {
                 giftMappingData = [];
                 giftMapById = {};
+                giftVariantSelectionByGroup = Object.create(null);
                 if (Array.isArray(arr)) {
                     giftMappingData = arr.map((obj) => ({
                         id: String(obj?.ID ?? obj?.Name ?? "").trim(),
@@ -2136,6 +2312,7 @@
                         (item) => item.dtName === "DT_GiftZongBiao",
                     );
                     filtered = getGiftFilteredData(filtered);
+                    filtered = groupGiftVariants(filtered);
                 }
 
                 status.innerText = `총 ${filtered.length} 세트`;
@@ -2158,13 +2335,11 @@
                         getLocalizedItemText(item, "single") ||
                         '<span style="color:#555">(내용 없음)</span>';
                     const metaChips = [];
-                    if (meta.star)
-                        metaChips.push(
-                            `<span class="chip active">${escapeHtml(String(meta.star))}성</span>`,
-                        );
+                    const starChips = renderGiftStarChips(item, meta);
+                    if (starChips) metaChips.push(starChips);
                     if (meta.effect)
                         metaChips.push(
-                            `<span class="chip">${escapeHtml(meta.effect)}</span>`,
+                            `<span class="chip">${escapeHtml(getGiftEffectLabel(meta.effect))}</span>`,
                         );
                     if (meta.attrType && meta.attrType !== "None")
                         metaChips.push(
@@ -2238,6 +2413,7 @@
 
             window.addEventListener("DOMContentLoaded", () => {
                 bindLanguageSelectorEvents();
+                bindGiftVariantSelectorEvents();
                 setDisplayLanguage(currentDisplayLanguage);
                 processFiles();
             });
